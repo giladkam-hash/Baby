@@ -210,6 +210,17 @@ nav.tabs button.on{color:var(--accent)}
 #viewer{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;place-items:center;z-index:40;padding:20px}
 #viewer.on{display:grid}
 #viewer img{max-width:100%;max-height:100%;border-radius:12px}
+.water{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:12px}
+.water .ic{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;flex:none}
+.water .ic svg{width:20px;height:20px}
+.water .grow{flex:1;min-width:0}
+.water .note{font-size:12px;margin-top:3px}
+.wbar{position:relative;height:10px;border-radius:99px;background:var(--bg);margin-top:6px;overflow:visible}
+.wbar i{position:absolute;inset-block:0;inset-inline-start:0;border-radius:99px;background:var(--i-bottle)}
+.wbar em{position:absolute;top:-3px;bottom:-3px;width:2px;margin-inline-start:-1px;background:var(--ink);opacity:.55;border-radius:2px}
+.wbtns{display:flex;gap:6px;flex:none}
+.wbtns .btn{min-height:44px;min-width:44px}
+.wbtns .btn[disabled]{opacity:.4}
 .mcount{display:flex;align-items:center;gap:10px;background:var(--c-feed);color:var(--ink);border-radius:14px;padding:10px 12px;margin-bottom:10px;font-size:14px}
 .mcount .grow{flex:1;min-width:0}
 .mcount .note{color:var(--ink);opacity:.75}
@@ -265,6 +276,7 @@ const IC={
  med:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l2 3v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9l2-3z"/><path d="M12 12v5M9.5 14.5h5"/></svg>',
  weight:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M8 10a4 4 0 0 1 8 0z"/><path d="M12 10l1.5-2"/></svg>',
  mmed:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="7" rx="3.5" transform="rotate(-35 12 12.5)"/><path d="M9.5 8.3l4.6 6.6"/></svg>',
+ water:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.6 6 11a6 6 0 0 1-12 0c0-4.4 6-11 6-11z"/><path d="M9 14.5a3 3 0 0 0 3 3"/></svg>',
  note:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h10l4 4v12H5z"/><path d="M8 11h8M8 15h6"/></svg>',
  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9H4z"/></svg>',
  log:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
@@ -273,7 +285,7 @@ const IC={
 };
 const T={
  feed:{l:'הנקה',c:'feed'}, bottle:{l:'בקבוק',c:'bottle'}, pump:{l:'שאיבה',c:'pump'}, diaper:{l:'חיתול',c:'diaper'},
- sleep:{l:'שינה',c:'sleep'}, q:{l:'שאלה לרופאה',c:'q'}, med:{l:'ויטמין / תרופה',c:'q'}, weight:{l:'משקל',c:'bottle'}, note:{l:'הערה',c:'pump'}, mmed:{l:'תרופה לאמא',c:'feed'}
+ sleep:{l:'שינה',c:'sleep'}, q:{l:'שאלה לרופאה',c:'q'}, med:{l:'ויטמין / תרופה',c:'q'}, weight:{l:'משקל',c:'bottle'}, note:{l:'הערה',c:'pump'}, mmed:{l:'תרופה לאמא',c:'feed'}, water:{l:'מים לאמא',c:'bottle'}
 };
 const SIDE={R:'ימין',L:'שמאל',B:'שני הצדדים'};
 const RATING={good:'טובה',ok:'בינונית',hard:'קשה'};
@@ -310,7 +322,7 @@ const clean=o=>JSON.parse(JSON.stringify(o));
 const round1=n=>Math.round(n*10)/10;
 
 /* ---------- state & storage ---------- */
-const DEF={name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{}};
+const DEF={name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{},water:{goal:0,ml:0,start:'07:00',end:'22:00'}};
 const S={days:{},questions:{},settings:{...DEF},timers:{feed:null,sleep:null},mode:'local'};
 const LS='babylog.v1';
 try{const raw=localStorage.getItem(LS);if(raw){const x=JSON.parse(raw);Object.assign(S,{days:x.days||{},questions:x.questions||{},settings:{...DEF,...(x.settings||{})},timers:x.timers||{feed:null,sleep:null}})}}catch(e){}
@@ -405,7 +417,7 @@ function recent(days){const out=[];const t=dayKey(Date.now());for(let i=days-1;i
 function lastOf(types){const ev=recent(4).filter(e=>types.includes(e.type));return ev[ev.length-1]||null}
 function nextSide(){const f=recent(4).filter(e=>e.type==='feed'&&e.side);const l=f[f.length-1];if(!l)return null;const s=l.lastSide||l.side;return s==='R'?'L':s==='L'?'R':null}
 function stats(list){
-  const s={feeds:0,feedMin:0,R:0,L:0,B:0,bottles:0,bottleMl:0,pumps:0,pumpMl:0,diapers:0,wet:0,dirty:0,sleeps:0,sleepMin:0,meds:[],weights:[],hard:0,notes:[],colorFlags:[],marked:[]};
+  const s={water:0,feeds:0,feedMin:0,R:0,L:0,B:0,bottles:0,bottleMl:0,pumps:0,pumpMl:0,diapers:0,wet:0,dirty:0,sleeps:0,sleepMin:0,meds:[],weights:[],hard:0,notes:[],colorFlags:[],marked:[]};
   for(const e of list){
     if(e.type==='feed'){s.feeds++;s.feedMin+=+e.dur||0;if(e.side)s[e.side]++;if(e.rating==='hard')s.hard++}
     else if(e.type==='bottle'){s.bottles++;s.bottleMl+=+e.ml||0}
@@ -414,6 +426,7 @@ function stats(list){
     else if(e.type==='sleep'){s.sleeps++;s.sleepMin+=+e.dur||0}
     else if(e.type==='med')s.meds.push(e);
     else if(e.type==='weight')s.weights.push(e);
+    else if(e.type==='water')s.water+=+e.n||1;
     if(e.note||(e.tags&&e.tags.length))s.notes.push(e);
     if(e.tags&&e.tags.includes('לסמן לרופאה'))s.marked.push(e);
   }
@@ -442,6 +455,7 @@ function desc(e){
   if(e.type==='sleep'){if(e.dur)p.push(durTxt(e.dur));if(e.end)p.push('עד '+hm(e.end))}
   if(e.type==='med')p.push(e.name||'');
   if(e.type==='mmed'){p.push(e.name||'');p.push(doseTxt(e))}
+  if(e.type==='water'){p.push('בקבוק');if(e.ml)p.push(e.ml+' מ״ל')}
   if(e.type==='weight')p.push((e.kg||'')+' ק״ג');
   if(e.tags&&e.tags.length)p.push(e.tags.join(', '));
   return p.filter(Boolean).join(' · ');
@@ -457,6 +471,7 @@ function dayText(k){
   L.push('חיתולים: '+st.diapers+' (רטובים '+st.wet+' · קקי '+st.dirty+')');
   L.push('שינה: '+durTxt(st.sleepMin)+' ('+st.sleeps+' פעמים)');
   if(st.meds.length)L.push('ניתן: '+st.meds.map(e=>e.name+' '+hm(e.t)).join(', '));
+  if(st.water||wGoal())L.push('מים לאמא: '+st.water+(wGoal()?' מתוך '+wGoal():'')+' בקבוקים'+(wSet().ml&&st.water?' (כ-'+st.water*wSet().ml+' מ״ל)':''));
   const mm=eventsOn(k).filter(e=>e.type==='mmed');if(mm.length)L.push('תרופות של אמא: '+mm.map(e=>[e.name,doseTxt(e),hm(e.t)].filter(Boolean).join(' ')).join(', '));
   if(st.weights.length)L.push('משקל: '+st.weights.map(e=>e.kg+' ק״ג').join(', '));
   const fl=flagsFor(k);if(fl.length){L.push('');L.push('לתשומת לב (לא אבחנה):');fl.forEach(f=>L.push('• '+f))}
@@ -521,6 +536,7 @@ function renderHome(){
   if(ts)h+=`<button class="running" type="button" data-open="sleep">${circleIc('sleep',34)}<span>ישנה עכשיו</span><span class="t num" data-clock="${ts.start}">${clock(now-ts.start)}</span></button>`;
   h+=remindersHTML();
   h+=painHTML();
+  h+=waterHTML();
   h+=`<div class="status">
     <div class="stat"><span>${feedWord()} אחרונה</span>${lf?(feedEnd(lf)>lf.t+6e4?`<b class="num">${agoS(lf.t)}<small>מתחילת ההנקה</small></b><b class="num">${agoS(feedEnd(lf))}<small>מסיום ההנקה</small></b>`:`<b class="num">${agoS(lf.t)}</b>`):'<b>—</b>'}${ns?`<span class="next">הצד הבא: ${SIDE[ns]}</span>`:`<span>${lf?T[lf.type].l:'עוד לא נרשם'}</span>`}</div>
     <div class="stat"><span>חיתול אחרון</span><b class="num">${ld?ago(ld.t).replace('לפני ',''):'—'}</b><span>${ld?KIND[ld.kind]:'עוד לא נרשם'}</span></div>
@@ -544,6 +560,38 @@ const agoS=t=>ago(t).replace('לפני ','');
 const openQs=()=>Object.values(S.questions).filter(q=>!q.done).length;
 const circleIc=(k,s)=>`<span class="ic" style="width:${s}px;height:${s}px;border-radius:50%;display:grid;place-items:center;background:var(--c-${T[k].c});color:var(--i-${T[k].c})"><span style="width:55%;height:55%;display:grid">${IC[k]}</span></span>`;
 
+/* mother's water: bottles per day, paced over the active hours */
+const wSet=()=>({...DEF.water,...(S.settings.water||{})});
+const wGoal=()=>Math.max(0,+wSet().goal||0);
+const tOn=(hhmm,base)=>{const [H,M]=String(hhmm||'00:00').split(':').map(Number);const d=new Date(base);d.setHours(H||0,M||0,0,0);return d.getTime()};
+function waterState(){
+  const now=Date.now(),w=wSet(),goal=wGoal(),cnt=stats(eventsOn(dayKey(now))).water;
+  let a=tOn(w.start,now),b=tOn(w.end,now);if(b<=a)b=a+16*36e5;
+  const frac=Math.min(1,Math.max(0,(now-a)/(b-a)));
+  const expected=Math.floor(goal*frac+1e-9);
+  const behind=goal&&now>a+36e5&&now<=b?expected-cnt:0;
+  return {goal,cnt,frac,expected,behind,a,b,now};
+}
+function waterHTML(){
+  const ws=waterState();if(!ws.goal)return '';
+  const pct=Math.min(100,ws.cnt/ws.goal*100),exp=ws.frac*100;
+  let h='';
+  if(ws.behind>=1&&ws.now>(localOnly.wSnooze||0))h+=`<div class="banner"><span class="grow">💧 שתית ${ws.cnt} מתוך ${ws.goal} בקבוקים. לפי השעה כדאי להיות כבר ב-${ws.expected}.</span><button type="button" data-wadd="1">+ בקבוק</button><button type="button" data-wsnooze="1">עוד שעה</button></div>`;
+  h+=`<div class="water"><span class="ic" style="background:var(--c-bottle);color:var(--i-bottle)">${IC.water}</span>
+   <div class="grow"><div><b>מים לאמא</b> <span class="num" style="white-space:nowrap">· <b>${ws.cnt}</b>/${ws.goal} בקבוקים</span></div>
+   <div class="wbar" role="progressbar" aria-valuemin="0" aria-valuemax="${ws.goal}" aria-valuenow="${ws.cnt}" aria-label="בקבוקי מים"><i style="width:${pct}%"></i>${ws.frac>0&&ws.frac<1?`<em style="inset-inline-start:${exp}%" title="איפה כדאי להיות לפי השעה"></em>`:''}</div>
+   <div class="note">${ws.cnt>=ws.goal?'הגעת ליעד היום 🎉':ws.frac>0&&ws.frac<1?'לפי השעה: '+ws.expected+' בקבוקים':ws.frac>=1?'היום נגמר':'היום מתחיל ב-'+esc(wSet().start)}</div></div>
+   <div class="wbtns"><button type="button" class="btn small" data-wdel="1" aria-label="הסרת הבקבוק האחרון"${ws.cnt?'':' disabled'}>−</button><button type="button" class="btn pri" data-wadd="1">+ בקבוק</button></div></div>`;
+  return h;
+}
+let waterSeen='';
+function waterAlert(){
+  const ws=waterState();if(ws.behind<1||ws.now<=(localOnly.wSnooze||0))return;
+  const key=dayKey(ws.now)+':'+ws.expected;if(waterSeen===key)return;waterSeen=key;
+  if(!document.hidden)toast('💧 הגיע הזמן לבקבוק מים ('+ws.cnt+'/'+ws.goal+')');
+  try{if('Notification' in window&&Notification.permission==='granted')new Notification('יומן התינוקת',{body:'💧 שתית '+ws.cnt+' מתוך '+ws.goal+' בקבוקים. כדאי להיות כבר ב-'+ws.expected+'.'})}catch(e){}
+}
+setInterval(waterAlert,60000);setTimeout(waterAlert,4000);
 /* mother's painkillers: countdown to the next allowed dose */
 function painHTML(){
   const now=Date.now();let h='',unset=[];
@@ -630,6 +678,7 @@ function renderTrends(){
   h+=chartCard('sleep','שעות שינה ביום',[{v:ss.map(s=>round1(s.sleepMin/60)),c:'var(--i-sleep)'}],lbl,keys,v=>v+' ש׳');
   if(feat('bottle'))h+=chartCard('bottle','מ״ל בבקבוקים ביום',[{v:ss.map(s=>s.bottleMl),c:'var(--i-bottle)'}],lbl,keys,v=>v+' מ״ל');
   if(feat('pump'))h+=chartCard('pump','מ״ל בשאיבה ביום',[{v:ss.map(s=>s.pumpMl),c:'var(--i-pump)'}],lbl,keys,v=>v+' מ״ל');
+  if(wGoal()||ss.some(s=>s.water))h+=chartCard('water','בקבוקי מים ביום (אמא)'+(wGoal()?' · יעד '+wGoal():''),[{v:ss.map(s=>s.water),c:'var(--i-bottle)'}],lbl,keys,v=>v+' בקבוקים');
   const sides=ss.reduce((a,s)=>({R:a.R+s.R,L:a.L+s.L,B:a.B+s.B}),{R:0,L:0,B:0});
   h+=`<div class="card"><h2>פיזור צדדים בהנקה</h2><div class="num">ימין ${sides.R} · שמאל ${sides.L} · שניהם ${sides.B}</div></div>`;
   h+=weightCard();
@@ -717,6 +766,13 @@ function renderPrefs(){
   h+=`<div class="card"><h2>ספים לסימונים</h2><p class="note" style="margin-top:0">היומן רק מסמן כשמה שנרשם חוצה ספים שאתם קובעים. כדאי להתאים אותם לפי הנחיית הצוות הרפואי. 0 מכבה.</p>
    <label class="f" for="pGap">פער בין ${feat('bottle')?'האכלות':'הנקות'} (שעות)</label><input class="in" type="number" inputmode="decimal" step="0.5" min="0" id="pGap" value="${s.gapH}">
    <label class="f" for="pWet">מינימום חיתולים רטובים ביום</label><input class="in" type="number" inputmode="numeric" min="0" id="pWet" value="${s.minWet}"></div>`;
+  const w=wSet();
+  h+=`<div class="card"><h2>מעקב מים לאמא</h2><p class="note" style="margin-top:0">כמה בקבוקים לסיים ביום. אם לפי השעה הקצב מאחור, יופיע תזכורת כשהיומן פתוח. 0 = כבוי.</p>
+   <div class="row" style="flex-wrap:nowrap"><div style="flex:1"><label class="f" for="wGoal">בקבוקים ביום</label><input class="in" type="number" inputmode="numeric" min="0" max="30" id="wGoal" data-water="goal" value="${+w.goal||0}"></div>
+   <div style="flex:1"><label class="f" for="wMl">גודל בקבוק (מ״ל, לא חובה)</label><input class="in" type="number" inputmode="numeric" min="0" id="wMl" data-water="ml" value="${+w.ml||''}" placeholder="למשל 750"></div></div>
+   <div class="row" style="flex-wrap:nowrap"><div style="flex:1"><label class="f" for="wStart">היום מתחיל ב-</label><input class="in" type="time" id="wStart" data-water="start" value="${esc(w.start)}"></div>
+   <div style="flex:1"><label class="f" for="wEnd">ומסתיים ב-</label><input class="in" type="time" id="wEnd" data-water="end" value="${esc(w.end)}"></div></div>
+   <p class="note">הקצב מחולק שווה על פני השעות האלה. למשל 8 בקבוקים בין 07:00 ל-22:00: בצהריים כדאי להיות בערך ב-2–3.</p></div>`;
   h+=`<div class="card"><h2>תרופות לאמא · זמן בין מנות</h2><p class="note" style="margin-top:0">כמה שעות צריך לחכות בין מנה למנה, לפי ההנחיה שקיבלתם. אחרי שנרשמת מנה, במסך הבית יופיע שעון שסופר עד שאפשר לקחת שוב. ריק = בלי שעון.</p>
    ${PAIN.map(n=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line);flex-wrap:nowrap"><span style="flex:1">${esc(n)}</span><input class="in" type="number" inputmode="decimal" step="0.5" min="0" data-mgap="${esc(n)}" value="${momGap(n)||''}" placeholder="שעות" style="max-width:110px" aria-label="שעות בין מנות של ${esc(n)}"><span class="note">שעות</span></div>`).join('')}</div>`;
   h+=`<div class="card"><h2>ויטמינים ותרופות לבחירה מהירה</h2><input class="in" id="pMeds" value="${esc((s.meds||[]).join(', '))}" aria-label="רשימה מופרדת בפסיקים"><p class="note">מפרידים בפסיקים.</p></div>`;
@@ -837,7 +893,7 @@ let restoreArm=false,scriptCode='';
 const HEAD=['מזהה','עודכן','מצב','תאריך','שעה','סוג','צד','משך (דק׳)','כמות (מ״ל)','סוג חלב','חיתול','צבע','איך הייתה','פריט / משקל','תגיות','הערה','תמונות','נתונים מלאים (לשחזור)'];
 function rowOf(e,j){
   const u=e.u||e.t,d=new Date(e.t);
-  return [e.id,new Date(u).toLocaleString('he-IL'),e.del?'נמחק':'פעיל',d.toLocaleDateString('he-IL'),hm(e.t),T[e.type]?T[e.type].l:e.type,SIDE[e.side]||'',e.dur||'',e.ml||'',MILK[e.milk]||'',KIND[e.kind]||'',e.color?colorName(e.color):'',RATING[e.rating]||'',e.type==='weight'?(e.kg||''):e.type==='mmed'?[e.name,doseTxt(e)].filter(Boolean).join(' '):(e.name||''),(e.tags||[]).join(', '),e.note||'',(e.photos||[]).length||'',j||''];
+  return [e.id,new Date(u).toLocaleString('he-IL'),e.del?'נמחק':'פעיל',d.toLocaleDateString('he-IL'),hm(e.t),T[e.type]?T[e.type].l:e.type,SIDE[e.side]||'',e.dur||'',e.ml||'',MILK[e.milk]||'',KIND[e.kind]||'',e.color?colorName(e.color):'',RATING[e.rating]||'',e.type==='weight'?(e.kg||''):e.type==='mmed'?[e.name,doseTxt(e)].filter(Boolean).join(' '):e.type==='water'?'בקבוק':(e.name||''),(e.tags||[]).join(', '),e.note||'',(e.photos||[]).length||'',j||''];
 }
 function renderPrefsSafe(){if(tab==='prefs'&&!document.activeElement?.closest('#v-prefs input,#v-prefs textarea'))renderPrefs()}
 
@@ -1051,6 +1107,10 @@ document.addEventListener('click',ev=>{
   if(d.rdel){S.settings={...S.settings,daily:(S.settings.daily||[]).filter(r=>r.id!==d.rdel)};saveSettings();renderPrefs();return}
   if(el.id==='shareCopy'){copyText($('#shareText').textContent);return}
   if(el.id==='shareNative'){navigator.share({text:$('#shareText').textContent}).catch(()=>{});return}
+  if(d.wadd){const w=wSet(),e={id:uid(),type:'water',n:1,t:Date.now()};if(+w.ml)e.ml=+w.ml;putEvent(e);const ws=waterState();
+    toast('💧 נרשם בקבוק ('+ws.cnt+(ws.goal?'/'+ws.goal:'')+')'+(ws.goal&&ws.cnt===ws.goal?' · הגעת ליעד!':''),'ביטול',()=>removeEvent(e));return}
+  if(d.wdel){const l=eventsOn(dayKey(Date.now())).filter(e=>e.type==='water').pop();if(l){removeEvent(l);toast('הוסר בקבוק אחד','ביטול',()=>putEvent({...l,del:false}))}return}
+  if(d.wsnooze){localOnly.wSnooze=Date.now()+36e5;persistUI();renderAll();return}
   if(d.awake){S.settings={...S.settings,keepAwake:d.awake==='1'};saveSettings();renderPrefs();return}
   if(d.feat){S.settings={...S.settings,features:{...(S.settings.features||{}),[d.feat]:d.on==='1'}};saveSettings();renderPrefs();return}
   /* sheet-scoped */
@@ -1122,6 +1182,7 @@ document.addEventListener('change',ev=>{
   if(el.id==='pBirth'){S.settings={...S.settings,birth:el.value};saveSettings();return}
   if(el.id==='pGap'){S.settings={...S.settings,gapH:+el.value||0};saveSettings();return}
   if(el.id==='pWet'){S.settings={...S.settings,minWet:+el.value||0};saveSettings();return}
+  if(el.dataset.water){const k=el.dataset.water,v=k==='start'||k==='end'?el.value:Math.max(0,+el.value||0);if((k==='start'||k==='end')&&!v)return;S.settings={...S.settings,water:{...wSet(),[k]:v}};saveSettings();return}
   if(el.dataset.mgap){const v=Math.max(0,+String(el.value).replace(',','.')||0);S.settings={...S.settings,momGap:{...(S.settings.momGap||{}),[el.dataset.mgap]:v||undefined}};saveSettings();return}
   if(el.id==='pMeds'){S.settings={...S.settings,meds:el.value.split(/[,،]/).map(s=>s.trim()).filter(Boolean)};saveSettings();return}
   if(el.id==='imFile'){const f=el.files&&el.files[0];if(!f)return;f.text().then(txt=>importData(JSON.parse(txt))).catch(()=>toast('הקובץ לא נקרא. צריך קובץ גיבוי מהיומן.'));el.value='';return}
