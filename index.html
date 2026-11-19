@@ -190,6 +190,9 @@ nav.tabs button.on{color:var(--accent)}
 .sh-foot .btn{flex:1;min-height:50px}
 .addnote{border:0;background:none;color:var(--accent);padding:8px 0;font-size:15px}
 .timer{font-family:var(--font-display);font-size:56px;font-weight:700;text-align:center;margin:8px 0 2px;direction:ltr}
+.timer.paused{opacity:.45}
+.confirm p{color:var(--muted);margin:-6px 0 16px}
+.opt.danger{background:#B0413E;border-color:#B0413E;color:#fff}
 .timer-sub{text-align:center;color:var(--muted);margin-bottom:14px}
 
 #toast{position:fixed;inset-inline:16px;bottom:calc(env(safe-area-inset-bottom) + 84px);margin:0 auto;max-width:520px;background:var(--ink);color:var(--bg);border-radius:14px;padding:12px 14px;display:flex;gap:12px;align-items:center;font-size:15px;opacity:0;transform:translateY(10px);pointer-events:none;transition:.2s;z-index:30}
@@ -247,6 +250,7 @@ const IC={
  q:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a4 4 0 0 0 8 0V3"/><path d="M10 12v3a5 5 0 0 0 10 0v-1"/><circle cx="20" cy="12" r="2"/><path d="M5 3h2M13 3h2"/></svg>',
  med:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l2 3v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9l2-3z"/><path d="M12 12v5M9.5 14.5h5"/></svg>',
  weight:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M8 10a4 4 0 0 1 8 0z"/><path d="M12 10l1.5-2"/></svg>',
+ mmed:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="7" rx="3.5" transform="rotate(-35 12 12.5)"/><path d="M9.5 8.3l4.6 6.6"/></svg>',
  note:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h10l4 4v12H5z"/><path d="M8 11h8M8 15h6"/></svg>',
  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9H4z"/></svg>',
  log:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
@@ -255,7 +259,7 @@ const IC={
 };
 const T={
  feed:{l:'הנקה',c:'feed'}, bottle:{l:'בקבוק',c:'bottle'}, pump:{l:'שאיבה',c:'pump'}, diaper:{l:'חיתול',c:'diaper'},
- sleep:{l:'שינה',c:'sleep'}, q:{l:'שאלה לרופאה',c:'q'}, med:{l:'ויטמין / תרופה',c:'q'}, weight:{l:'משקל',c:'bottle'}, note:{l:'הערה',c:'pump'}
+ sleep:{l:'שינה',c:'sleep'}, q:{l:'שאלה לרופאה',c:'q'}, med:{l:'ויטמין / תרופה',c:'q'}, weight:{l:'משקל',c:'bottle'}, note:{l:'הערה',c:'pump'}, mmed:{l:'תרופה לאמא',c:'feed'}
 };
 const SIDE={R:'ימין',L:'שמאל',B:'שני הצדדים'};
 const RATING={good:'טובה',ok:'בינונית',hard:'קשה'};
@@ -265,6 +269,10 @@ const COLORS=[['yellow','צהוב','#E9C64A'],['mustard','חרדל','#C9A13A'],[
 const FLAG_COLORS=['pale','red'];
 const FEED_TAGS=['נרדמה תוך כדי','פלטה','היצמדות קשה','כאב','רעבה מאוד','לסמן לרופאה'];
 const GEN_TAGS=['לסמן לרופאה'];
+/* mother's medication: preset names and dose choices (unit shown next to the number) */
+const MOM_MEDS=[['איבופן',{u:'מ״ג',d:[200,300,400]}],['אקמול',{u:'מ״ג',d:[500,750,1000]}],['אופטלגין נוזלי',{u:'מ״ל',d:[10,20,30,40,50,60,70]}],['מולטי ויטמין',null],['סירופ אבליק',null]];
+const momDose=n=>(MOM_MEDS.find(m=>m[0]===n)||[0,null])[1];
+const doseTxt=e=>e.dose?e.dose+' '+(e.unit||(momDose(e.name)||{}).u||''):'';
 
 /* ---------- utils ---------- */
 const $=s=>document.querySelector(s);
@@ -415,6 +423,7 @@ function desc(e){
   if(e.type==='diaper'){p.push(KIND[e.kind]||'');if(e.color)p.push(colorName(e.color))}
   if(e.type==='sleep'){if(e.dur)p.push(durTxt(e.dur));if(e.end)p.push('עד '+hm(e.end))}
   if(e.type==='med')p.push(e.name||'');
+  if(e.type==='mmed'){p.push(e.name||'');p.push(doseTxt(e))}
   if(e.type==='weight')p.push((e.kg||'')+' ק״ג');
   if(e.tags&&e.tags.length)p.push(e.tags.join(', '));
   return p.filter(Boolean).join(' · ');
@@ -430,6 +439,7 @@ function dayText(k){
   L.push('חיתולים: '+st.diapers+' (רטובים '+st.wet+' · קקי '+st.dirty+')');
   L.push('שינה: '+durTxt(st.sleepMin)+' ('+st.sleeps+' פעמים)');
   if(st.meds.length)L.push('ניתן: '+st.meds.map(e=>e.name+' '+hm(e.t)).join(', '));
+  const mm=eventsOn(k).filter(e=>e.type==='mmed');if(mm.length)L.push('תרופות של אמא: '+mm.map(e=>[e.name,doseTxt(e),hm(e.t)].filter(Boolean).join(' ')).join(', '));
   if(st.weights.length)L.push('משקל: '+st.weights.map(e=>e.kg+' ק״ג').join(', '));
   const fl=flagsFor(k);if(fl.length){L.push('');L.push('לתשומת לב (לא אבחנה):');fl.forEach(f=>L.push('• '+f))}
   const notes=st.notes.filter(e=>e.note);if(notes.length){L.push('');L.push('הערות:');notes.forEach(e=>L.push('• '+hm(e.t)+' '+T[e.type].l+': '+e.note))}
@@ -489,7 +499,7 @@ function renderHome(){
   const lf=lastOf(['feed','bottle']),ld=lastOf(['diaper']),ls=lastOf(['sleep']),ns=nextSide(),now=Date.now();
   const tf=S.timers.feed,ts=S.timers.sleep;
   let h='';
-  if(tf)h+=`<button class="running" type="button" data-open="feedtimer">${circleIc('feed',34)}<span>הנקה פעילה · ${SIDE[tf.cur]||''}</span><span class="t num" data-clock="${tf.start}">${clock(now-tf.start)}</span></button>`;
+  if(tf)h+=`<button class="running" type="button" data-open="feedtimer">${circleIc('feed',34)}<span>${tf.paused?'הנקה מושהית':'הנקה פעילה'} · ${SIDE[tf.cur]||''}</span><span class="t num"${clockAttr(tf)}>${clock(feedMs(tf))}</span></button>`;
   if(ts)h+=`<button class="running" type="button" data-open="sleep">${circleIc('sleep',34)}<span>ישנה עכשיו</span><span class="t num" data-clock="${ts.start}">${clock(now-ts.start)}</span></button>`;
   h+=remindersHTML();
   h+=`<div class="status">
@@ -502,7 +512,7 @@ function renderHome(){
     const live=(k==='feed'&&tf)||(k==='sleep'&&ts);
     const sub=k==='q'?(openQs()?openQs()+' פתוחות':''):live?'פעיל':e?ago(k==='sleep'?(e.end||e.t):e.t):'';
     return `<button class="act" type="button" data-open="${k}"><span class="circle${live?' live':''}" style="background:var(--c-${T[k].c});color:var(--i-${T[k].c})">${IC[k]}</span><span class="lbl">${k==='q'?'שאלה לרופאה':T[k].l}</span><span class="ago">${sub}</span></button>`}).join('')}</div>`;
-  h+=`<div class="more"><button type="button" data-open="med">+ ויטמין / תרופה</button><button type="button" data-open="weight">+ משקל</button><button type="button" data-open="note">+ הערה</button></div>`;
+  h+=`<div class="more"><button type="button" data-open="med">+ ויטמין / תרופה לתינוקת</button><button type="button" data-open="mmed">+ תרופה לאמא</button><button type="button" data-open="weight">+ משקל</button><button type="button" data-open="note">+ הערה</button></div>`;
   const k=dayKey(now),st=stats(eventsOn(k));
   h+=`<div class="today">היום: <b class="num">${st.feeds}</b> הנקות · ${feat('bottle')?`<b class="num">${st.bottles}</b> בקבוקים · `:''}<b class="num">${st.wet}</b> רטובים · <b class="num">${st.dirty}</b> קקי · שינה <b class="num">${durTxt(st.sleepMin)}</b>
    <div class="row" style="margin-top:10px"><button class="btn small" type="button" data-share="${k}">שיתוף סיכום יומי</button><button class="btn small" type="button" data-goto="log">ליומן המלא</button></div></div>`;
@@ -711,8 +721,13 @@ const FLOWS={
     {k:'kind',q:'מה היה בחיתול?',opts:()=>[opt('pee','פיפי'),opt('poo','קקי'),opt('both','שניהם')],cls:'three',next:v=>v==='pee'?'save':1},
     {k:'color',q:'צבע (לא חובה)',opts:()=>COLORS.map(([v,l,c])=>opt(v,l,{sw:c})),final:1,skip:1,tags:GEN_TAGS}
   ],
-  med:[{k:'name',q:'מה ניתן?',opts:()=>[...(S.settings.meds||[]).map(m=>opt(m,m)),opt('other','אחר…')],final:1}]
+  med:[{k:'name',q:'מה ניתן?',opts:()=>[...(S.settings.meds||[]).map(m=>opt(m,m)),opt('other','אחר…')],final:1}],
+  mmed:[
+    {k:'name',q:'מה אמא לקחה?',opts:()=>[...MOM_MEDS.map(([n])=>{const l=lastMom(n);return opt(n,n,{sub:l?'אחרונה '+ago(l.t):''})}),opt('other','אחר…')],next:v=>momDose(v)?1:'save'},
+    {k:'dose',q:'איזה מינון?',opts:()=>{const m=momDose(F.d.name)||{u:'',d:[]};return [...m.d.map(x=>opt(x,x+'',{sub:m.u})),opt('other','אחר…')]},cls:'three',final:1}
+  ]
 };
+function lastMom(n){const l=recent(3).filter(e=>e.type==='mmed'&&e.name===n);return l[l.length-1]||null}
 
 function openFlow(type){
   if(type==='feedtimer'){F={type:'feed',d:{type:'feed'},i:0,off:0,timerView:1};showSheet();renderTimer();return}
@@ -760,7 +775,7 @@ let restoreArm=false,scriptCode='';
 const HEAD=['מזהה','עודכן','מצב','תאריך','שעה','סוג','צד','משך (דק׳)','כמות (מ״ל)','סוג חלב','חיתול','צבע','איך הייתה','פריט / משקל','תגיות','הערה','תמונות','נתונים מלאים (לשחזור)'];
 function rowOf(e,j){
   const u=e.u||e.t,d=new Date(e.t);
-  return [e.id,new Date(u).toLocaleString('he-IL'),e.del?'נמחק':'פעיל',d.toLocaleDateString('he-IL'),hm(e.t),T[e.type]?T[e.type].l:e.type,SIDE[e.side]||'',e.dur||'',e.ml||'',MILK[e.milk]||'',KIND[e.kind]||'',e.color?colorName(e.color):'',RATING[e.rating]||'',e.type==='weight'?(e.kg||''):(e.name||''),(e.tags||[]).join(', '),e.note||'',(e.photos||[]).length||'',j||''];
+  return [e.id,new Date(u).toLocaleString('he-IL'),e.del?'נמחק':'פעיל',d.toLocaleDateString('he-IL'),hm(e.t),T[e.type]?T[e.type].l:e.type,SIDE[e.side]||'',e.dur||'',e.ml||'',MILK[e.milk]||'',KIND[e.kind]||'',e.color?colorName(e.color):'',RATING[e.rating]||'',e.type==='weight'?(e.kg||''):e.type==='mmed'?[e.name,doseTxt(e)].filter(Boolean).join(' '):(e.name||''),(e.tags||[]).join(', '),e.note||'',(e.photos||[]).length||'',j||''];
 }
 function renderPrefsSafe(){if(tab==='prefs'&&!document.activeElement?.closest('#v-prefs input,#v-prefs textarea'))renderPrefs()}
 
@@ -771,9 +786,9 @@ function toTSV(rows){return rows.map(r=>r.map(c=>String(c??'').replace(/[\t\n]/g
 function renderStep(){
   const flow=FLOWS[F.type],st=flow[F.i];
   const dots=flow.length>1?`<span class="dots">${flow.map((_,j)=>`<i class="${j<=F.i?'on':''}"></i>`).join('')}</span>`:'';
-  let h=head(T[F.type].l,F.type,dots)+whenRow();
+  let h=head(T[F.type].l,F.type,dots)+whenRow(F.type==='mmed'?'מתי נלקח:':undefined);
   h+=`<h3 class="q">${st.q}</h3><div class="opts ${st.cls||''}">${st.opts().map(o=>`<button type="button" class="opt${o.wide?' wide':''}${o.hi?' hi':''}${o.sug?' sug':''}" data-pick="${esc(o.v)}">${o.sw?`<span class="sw" style="background:${o.sw}"></span>`:''}${esc(o.l)}${o.sub?`<small>${esc(o.sub)}</small>`:''}</button>`).join('')}</div>`;
-  if(F.other===st.k)h+=`<div class="row" style="margin-top:10px;flex-wrap:nowrap"><input class="in" type="number" inputmode="decimal" id="otherIn" placeholder="${st.k==='dur'?'דקות':st.k==='ml'?'מ״ל':''}" ${st.k==='name'?'type="text"':''}><button class="btn pri" type="button" id="otherOk">אישור</button></div>`;
+  if(F.other===st.k)h+=`<div class="row" style="margin-top:10px;flex-wrap:nowrap"><input class="in" type="number" inputmode="decimal" id="otherIn" placeholder="${st.k==='dur'?'דקות':st.k==='ml'?'מ״ל':st.k==='dose'?((momDose(F.d.name)||{}).u||'מינון'):st.k==='name'?'שם התרופה':''}" ${st.k==='name'?'type="text"':''}><button class="btn pri" type="button" id="otherOk">אישור</button></div>`;
   h+=noteBlock(st);
   h+=`<div class="sh-foot">${F.i>0||st.final?`<button class="btn pri" type="button" id="saveNow">שמירה${F.i>0&&!st.final?' בלי להמשיך':''}</button>`:''}${st.skip&&!st.final?`<button class="btn" type="button" id="skip">דילוג</button>`:''}</div>`;
   sheet.innerHTML=h;
@@ -794,6 +809,7 @@ function finish(extra){
   keepNote();
   const e={...F.d,...(extra||{}),id:uid()};
   if(e.t==null)e.t=getT();
+  if(e.type==='mmed'&&e.dose&&!e.unit){const m=momDose(e.name);if(m)e.unit=m.u}
   if(!e.tags||!e.tags.length)delete e.tags;if(!e.note)delete e.note;if(!e.photos||!e.photos.length)delete e.photos;
   putEvent(e);closeSheet();
   toast('נשמר: '+T[e.type].l+(desc(e)?' · '+desc(e):''),'ביטול',()=>removeEvent(e));
@@ -801,6 +817,9 @@ function finish(extra){
 }
 
 /* feed timer */
+/* elapsed feeding time, not counting pauses (older timers have no pause fields) */
+const feedMs=tf=>Math.max(0,(tf.paused||Date.now())-tf.start-(tf.pausedMs||0));
+const clockAttr=tf=>tf.paused?'':` data-clock="${tf.start+(tf.pausedMs||0)}"`;
 function startFeedTimer(){
   const side=F.d.side==='B'||!F.d.side?(nextSide()||'L'):F.d.side;
   S.timers={...S.timers,feed:{start:getT(),cur:side,used:[side],note:''}};saveTimers();
@@ -808,17 +827,22 @@ function startFeedTimer(){
 }
 function renderTimer(){
   const tf=S.timers.feed;if(!tf){if(F&&F.timerView&&!F.rateAfter)closeSheet();return}
-  let h=head('הנקה פעילה','feed');
-  h+=`<div class="timer num" data-clock="${tf.start}">${clock(Date.now()-tf.start)}</div><div class="timer-sub">התחילה ב-${hm(tf.start)} · צד נוכחי: <b>${SIDE[tf.cur]}</b></div>
+  let h=head(tf.paused?'הנקה מושהית':'הנקה פעילה','feed');
+  if(F.cancelAsk){
+    h+=`<div class="confirm" role="alertdialog" aria-labelledby="cfQ"><h3 class="q" id="cfQ">לבטל את ההנקה?</h3><p>הטיימר יימחק וההנקה (${durTxt(Math.max(1,Math.round(feedMs(tf)/6e4)))}) לא תירשם ביומן.</p>
+     <div class="opts"><button type="button" class="opt" id="tCancelNo">לא, להמשיך</button><button type="button" class="opt danger" id="tCancelYes">כן, לבטל</button></div></div>`;
+    sheet.innerHTML=h;return;
+  }
+  h+=`<div class="timer num${tf.paused?' paused':''}"${clockAttr(tf)}>${clock(feedMs(tf))}</div><div class="timer-sub">${tf.paused?'<b>מושהה</b> · ':''}התחילה ב-${hm(tf.start)} · צד נוכחי: <b>${SIDE[tf.cur]}</b></div>
    <div class="opts"><button type="button" class="opt${tf.cur==='R'?' hi':''}" data-tside="R">ימין</button><button type="button" class="opt${tf.cur==='L'?' hi':''}" data-tside="L">שמאל</button>
-   <button type="button" class="opt wide hi" id="tStop">סיום הנקה</button></div>
-   <div class="sh-foot"><button class="btn" type="button" id="shClose2">סגירה (הטיימר ממשיך)</button><button class="btn dang" type="button" id="tCancel">${F.cancelArm?'ללחוץ שוב לביטול':'ביטול הטיימר'}</button></div>`;
+   <button type="button" class="opt" id="tPause">${tf.paused?'▶ המשך':'❚❚ השהייה'}</button><button type="button" class="opt hi" id="tStop">סיום הנקה</button></div>
+   <div class="sh-foot"><button class="btn" type="button" id="shClose2">סגירה (הטיימר ממשיך)</button><button class="btn dang" type="button" id="tCancel">ביטול הטיימר</button></div>`;
   sheet.innerHTML=h;
 }
 function stopFeedTimer(){
-  const tf=S.timers.feed;if(!tf)return;const end=Date.now();
+  const tf=S.timers.feed;if(!tf)return;const end=tf.paused||Date.now();
   const used=[...new Set(tf.used)];
-  F={type:'feed',i:2,d:{type:'feed',tags:[],t:tf.start,end,dur:Math.max(1,Math.round((end-tf.start)/6e4)),side:used.length>1?'B':used[0],lastSide:tf.cur},off:0,hist:[],rateAfter:1};
+  F={type:'feed',i:2,d:{type:'feed',tags:[],t:tf.start,end,dur:Math.max(1,Math.round(feedMs(tf)/6e4)),side:used.length>1?'B':used[0],lastSide:tf.cur},off:0,hist:[],rateAfter:1};
   S.timers={...S.timers,feed:null};saveTimers();renderStep();
 }
 
@@ -867,6 +891,7 @@ function renderEdit(){
   if(t==='diaper'){h+=`<label class="f">סוג</label>${segH('kind',KIND,e.kind)}<label class="f">צבע</label>${segH('color',Object.fromEntries([['','ללא'],...COLORS.map(c=>[c[0],c[1]])]),e.color||'')}`}
   if(t==='sleep'){h+=`<label class="f" for="eDur">משך (דקות)</label><input class="in" type="number" inputmode="numeric" id="eDur" value="${e.dur||''}">`}
   if(t==='med'){h+=`<label class="f" for="eName">מה ניתן</label><input class="in" id="eName" value="${esc(e.name||'')}">`}
+  if(t==='mmed'){h+=`<label class="f" for="eName">תרופה</label><input class="in" id="eName" value="${esc(e.name||'')}"><label class="f" for="eDose">מינון${e.unit||momDose(e.name)?' ('+(e.unit||momDose(e.name).u)+')':''}</label><input class="in" type="number" inputmode="decimal" id="eDose" value="${e.dose||''}">`}
   if(t==='weight'){h+=`<label class="f" for="eKg">משקל (ק״ג)</label><input class="in" type="number" inputmode="decimal" step="0.005" id="eKg" value="${e.kg||''}">`}
   const tags=t==='feed'?FEED_TAGS:GEN_TAGS;
   h+=`<div class="tags">${tags.map(x=>`<button type="button" data-etag="${esc(x)}" class="${e.tags.includes(x)?'on':''}">${esc(x)}</button>`).join('')}</div>`;
@@ -882,6 +907,7 @@ function readEdit(){
   if(v('eMl')!==undefined)e.ml=+v('eMl')||0;
   if(v('eKg')!==undefined)e.kg=+v('eKg')||0;
   if(v('eName')!==undefined)e.name=v('eName').trim();
+  if(v('eDose')!==undefined){e.dose=+v('eDose')||0;if(!e.dose){delete e.dose;delete e.unit}else if(!e.unit&&momDose(e.name))e.unit=momDose(e.name).u}
   e.note=(v('eNote')||'').trim();
   if(e.type==='sleep'&&e.dur)e.end=e.t+e.dur*6e4;
   if(e.type==='feed'&&e.end&&e.dur)e.end=e.t+e.dur*6e4;
@@ -926,7 +952,11 @@ document.addEventListener('click',ev=>{
   if(el.id==='otherOk'){const v=$('#otherIn').value.trim();if(v)pick(v);return}
   if(d.tside){const tf=S.timers.feed;S.timers={...S.timers,feed:{...tf,cur:d.tside,used:[...tf.used,d.tside]}};saveTimers();renderTimer();return}
   if(el.id==='tStop'){stopFeedTimer();return}
-  if(el.id==='tCancel'){if(!F.cancelArm){F.cancelArm=1;renderTimer();return}S.timers={...S.timers,feed:null};saveTimers();closeSheet();toast('הטיימר בוטל');return}
+  if(el.id==='tPause'){const tf=S.timers.feed;if(!tf)return;const now=Date.now();
+    S.timers={...S.timers,feed:tf.paused?{...tf,pausedMs:(tf.pausedMs||0)+(now-tf.paused),paused:null}:{...tf,paused:now}};saveTimers();renderTimer();return}
+  if(el.id==='tCancel'){F.cancelAsk=1;renderTimer();return}
+  if(el.id==='tCancelNo'){F.cancelAsk=0;renderTimer();return}
+  if(el.id==='tCancelYes'){S.timers={...S.timers,feed:null};saveTimers();closeSheet();toast('הטיימר בוטל');return}
   if(el.id==='sStart'){S.timers={...S.timers,sleep:{start:getT()}};saveTimers();closeSheet();toast('טיימר שינה פועל. לחיצה על "שינה" כשהיא מתעוררת.');return}
   if(el.id==='sManual'){F.sleepManual=1;F.hist=[];sleepStep();return}
   if(d.sdur){keepNote();const end=getT(),dur=+d.sdur;finish({t:end-dur*6e4,end,dur});return}
