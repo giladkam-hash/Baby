@@ -241,6 +241,13 @@ nav.tabs button.on{color:var(--accent)}
 .wbtns{display:flex;gap:6px;flex:none}
 .wbtns .btn{min-height:44px;min-width:44px}
 .wbtns .btn[disabled]{opacity:.4}
+.fban{display:flex;align-items:center;gap:10px;background:var(--c-feed);color:var(--ink);border-radius:14px;padding:10px 12px;margin-bottom:10px;font-size:15px}
+.fban .grow{flex:1;min-width:0}
+.fban .note{color:var(--ink);opacity:.75;font-size:13px}
+.fban .t{font-family:var(--font-display);font-size:22px;font-weight:600;direction:ltr}
+.fban.late{background:var(--warn-bg);color:var(--warn-ink)}
+.fban.late .note{color:var(--warn-ink)}
+.fban .btn{background:var(--surface)}
 .mcount{display:flex;align-items:center;gap:10px;background:var(--c-feed);color:var(--ink);border-radius:14px;padding:10px 12px;margin-bottom:10px;font-size:14px}
 .mcount .grow{flex:1;min-width:0}
 .mcount .note{color:var(--ink);opacity:.75}
@@ -570,6 +577,7 @@ function renderHome(){
   let h='';
   if(tf)h+=`<button class="running" type="button" data-open="feedtimer">${circleIc('feed',34)}<span>${tf.paused?'הנקה מושהית':'הנקה פעילה'} · ${SIDE[tf.cur]||''}</span><span class="t num"${clockAttr(tf)}>${clock(feedMs(tf))}</span></button>`;
   if(ts)h+=`<button class="running" type="button" data-open="sleep">${circleIc('sleep',34)}<span>ישנה עכשיו</span><span class="t num" data-clock="${ts.start}">${clock(now-ts.start)}</span></button>`;
+  h+=feedBanner();
   h+=remindersHTML();
   h+=painHTML();
   h+=waterHTML();
@@ -628,6 +636,15 @@ function waterAlert(){
   try{if('Notification' in window&&Notification.permission==='granted')new Notification('יומן התינוקת',{body:'💧 שתית '+ws.cnt+' מתוך '+ws.goal+' בקבוקים. כדאי להיות כבר ב-'+ws.expected+'.'})}catch(e){}
 }
 setInterval(waterAlert,60000);setTimeout(waterAlert,4000);
+/* constant banner: countdown from the end of the last feed to the next one (interval from settings) */
+function feedBanner(){
+  if(S.timers.feed)return '';
+  const lf=lastOf(['feed','bottle']);if(!lf)return '';
+  const end=feedEnd(lf),every=+S.settings.feedEvery||0,due=end+every*36e5,now=Date.now(),w=feedWord();
+  const info=`${w} אחרונה הסתיימה ב-<b class="num">${hm(end)}</b>${dayKey(end)!==dayKey(now)?' (אתמול)':''}${lf.side?' · '+SIDE[lf.side]:''}`;
+  if(every&&now<due)return `<div class="fban"><div class="grow"><div>${w} הבאה בעוד</div><div class="note">${info} · הבאה ב-${hm(due)}</div></div><span class="t num" data-cd="${due}">${clock(due-now)}</span></div>`;
+  return `<div class="fban${every?' late':''}"><div class="grow"><div>${every?'הגיע הזמן ל'+w+' · עברו':'עברו מסיום ה'+w}</div><div class="note">${info}</div></div><span class="t num" data-clock="${end}">${clock(now-end)}</span>${every?`<button type="button" class="btn small" data-open="feed">תיעוד</button>`:''}</div>`;
+}
 /* mother's painkillers: countdown to the next allowed dose */
 function painHTML(){
   const now=Date.now();let h='',unset=[];
@@ -659,7 +676,7 @@ function remindersHTML(){
   let b='';const k=dayKey(Date.now());
   if(cfg.url&&sync.status==='err'&&navigator.onLine!==false)b+=`<div class="banner"><span class="grow">הסנכרון לגוגל שיטס לא הושלם</span><button type="button" data-goto="prefs">לפרטים</button></div>`;
   else if(!cfg.url&&recent(30).length>=5&&localOnly.dismiss.backup!==k)b+=`<div class="banner"><span class="grow">כדאי לחבר גיבוי לגוגל שיטס כדי שהמידע לא יאבד</span><button type="button" data-goto="prefs">חיבור</button><button type="button" id="bkLater">לא היום</button></div>`;
-  return b+dueReminders().map(r=>`<div class="banner"><span class="grow">${esc(r.txt)}</span>${r.act?`<button type="button" data-open="${r.act}">${r.actL}</button>`:`<button type="button" ${r.mom?'data-momtake':'data-givemed'}="${esc(r.med)}">${r.actL}</button>`}${r.snooze?`<button type="button" data-snooze="1">עוד 15 דק׳</button>`:`<button type="button" data-dismiss="${r.id}">לא היום</button>`}</div>`).join('')}
+  return b+dueReminders().filter(r=>r.id!=='feed').map(r=>`<div class="banner"><span class="grow">${esc(r.txt)}</span>${r.act?`<button type="button" data-open="${r.act}">${r.actL}</button>`:`<button type="button" ${r.mom?'data-momtake':'data-givemed'}="${esc(r.med)}">${r.actL}</button>`}${r.snooze?`<button type="button" data-snooze="1">עוד 15 דק׳</button>`:`<button type="button" data-dismiss="${r.id}">לא היום</button>`}</div>`).join('')}
 let notified={};
 function notifyCheck(){
   try{if(!('Notification' in window)||Notification.permission!=='granted')return;
