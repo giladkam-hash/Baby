@@ -169,10 +169,13 @@ nav.tabs button.on{color:var(--accent)}
 .dots{display:flex;gap:5px}
 .dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}
 .dots i.on{background:var(--accent)}
-.when{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;align-items:center}
+.when{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:4px;margin-bottom:12px;align-items:center}
 .when span{font-size:13px;color:var(--muted);white-space:nowrap}
 .when button{border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:7px 12px;font-size:13px;white-space:nowrap}
 .when button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.when .mt{position:relative;display:inline-flex}
+.when .mt input{position:absolute;inset:0;opacity:0;width:100%;pointer-events:none}
+.when .mt input.show{position:static;opacity:1;pointer-events:auto;margin-inline-start:6px}
 .when input{border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:5px 10px;font-size:14px}
 .q{font-size:24px;margin:6px 0 14px}
 .opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -215,6 +218,12 @@ nav.tabs button.on{color:var(--accent)}
 .water .ic svg{width:20px;height:20px}
 .water .grow{flex:1;min-width:0}
 .water .note{font-size:12px;margin-top:3px}
+.wfill{display:grid;place-items:center;width:78%;height:78%;border-radius:50%;background:var(--c-bottle)}
+.wfill svg{width:58%;height:58%}
+.mrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 0;border-bottom:1px solid var(--line)}
+.mrow b{flex:1 1 100%;font-family:var(--font-display);font-weight:600}
+.mrow label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.mrow .in{width:auto;max-width:110px;padding:8px 10px}
 .wbar{position:relative;height:10px;border-radius:99px;background:var(--bg);margin-top:6px;overflow:visible}
 .wbar i{position:absolute;inset-block:0;inset-inline-start:0;border-radius:99px;background:var(--i-bottle)}
 .wbar em{position:absolute;top:-3px;bottom:-3px;width:2px;margin-inline-start:-1px;background:var(--ink);opacity:.55;border-radius:2px}
@@ -276,6 +285,7 @@ const IC={
  med:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l2 3v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9l2-3z"/><path d="M12 12v5M9.5 14.5h5"/></svg>',
  weight:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M8 10a4 4 0 0 1 8 0z"/><path d="M12 10l1.5-2"/></svg>',
  mmed:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="7" rx="3.5" transform="rotate(-35 12 12.5)"/><path d="M9.5 8.3l4.6 6.6"/></svg>',
+ wbottle:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5h4v2.5h-4z"/><path d="M10 5c0 1.2-2.5 2-2.5 4v10.5a2 2 0 0 0 2 2h5a2 2 0 0 0 2-2V9c0-2-2.5-2.8-2.5-4"/><path d="M7.5 12h9"/><path d="M10.5 15.5c.5 1 1.5 1.5 2.5 1.2"/></svg>',
  water:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.6 6 11a6 6 0 0 1-12 0c0-4.4 6-11 6-11z"/><path d="M9 14.5a3 3 0 0 0 3 3"/></svg>',
  note:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h10l4 4v12H5z"/><path d="M8 11h8M8 15h6"/></svg>',
  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9H4z"/></svg>',
@@ -285,7 +295,7 @@ const IC={
 };
 const T={
  feed:{l:'הנקה',c:'feed'}, bottle:{l:'בקבוק',c:'bottle'}, pump:{l:'שאיבה',c:'pump'}, diaper:{l:'חיתול',c:'diaper'},
- sleep:{l:'שינה',c:'sleep'}, q:{l:'שאלה לרופאה',c:'q'}, med:{l:'ויטמין / תרופה',c:'q'}, weight:{l:'משקל',c:'bottle'}, note:{l:'הערה',c:'pump'}, mmed:{l:'תרופה לאמא',c:'feed'}, water:{l:'מים לאמא',c:'bottle'}
+ sleep:{l:'שינה',c:'sleep'}, q:{l:'שאלה לרופאה',c:'q'}, med:{l:'ויטמין / תרופה',c:'q'}, weight:{l:'משקל',c:'bottle'}, note:{l:'הערה',c:'pump'}, mmed:{get l(){return 'תרופה ל'+MOM()},c:'feed'}, water:{get l(){return 'מים ל'+MOM()},c:'bottle'}
 };
 const SIDE={R:'ימין',L:'שמאל',B:'שני הצדדים'};
 const RATING={good:'טובה',ok:'בינונית',hard:'קשה'};
@@ -297,6 +307,7 @@ const FEED_TAGS=['נרדמה תוך כדי','פלטה','היצמדות קשה','
 const GEN_TAGS=['לסמן לרופאה'];
 /* mother's medication: preset names and dose choices (unit shown next to the number) */
 const MOM_MEDS=[['איבופן',{u:'מ״ג',d:[200,300,400],pain:1}],['אקמול',{u:'מ״ג',d:[500,750,1000],pain:1}],['אופטלגין נוזלי',{u:'מ״ל',d:[10,20,30,40,50,60,70],pain:1}],['מולטי ויטמין',null],['סירופ אבליק',null]];
+const momNames=()=>[...MOM_MEDS.map(m=>m[0]),...(S.settings.momExtra||[]).filter(n=>!MOM_MEDS.some(m=>m[0]===n))];
 const momDose=n=>(MOM_MEDS.find(m=>m[0]===n)||[0,null])[1];
 const PAIN=MOM_MEDS.filter(m=>m[1]&&m[1].pain).map(m=>m[0]);
 const momGap=n=>+((S.settings.momGap||{})[n])||0;
@@ -322,7 +333,8 @@ const clean=o=>JSON.parse(JSON.stringify(o));
 const round1=n=>Math.round(n*10)/10;
 
 /* ---------- state & storage ---------- */
-const DEF={name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{},water:{goal:0,ml:0,start:'07:00',end:'22:00'}};
+const MOM=()=>(S.settings.momName||'').trim()||'אמא';
+const DEF={momName:'',momExtra:[],name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{},water:{goal:0,ml:0,start:'07:00',end:'22:00'}};
 const S={days:{},questions:{},settings:{...DEF},timers:{feed:null,sleep:null},mode:'local'};
 const LS='babylog.v1';
 try{const raw=localStorage.getItem(LS);if(raw){const x=JSON.parse(raw);Object.assign(S,{days:x.days||{},questions:x.questions||{},settings:{...DEF,...(x.settings||{})},timers:x.timers||{feed:null,sleep:null}})}}catch(e){}
@@ -471,8 +483,8 @@ function dayText(k){
   L.push('חיתולים: '+st.diapers+' (רטובים '+st.wet+' · קקי '+st.dirty+')');
   L.push('שינה: '+durTxt(st.sleepMin)+' ('+st.sleeps+' פעמים)');
   if(st.meds.length)L.push('ניתן: '+st.meds.map(e=>e.name+' '+hm(e.t)).join(', '));
-  if(st.water||wGoal())L.push('מים לאמא: '+st.water+(wGoal()?' מתוך '+wGoal():'')+' בקבוקים'+(wSet().ml&&st.water?' (כ-'+st.water*wSet().ml+' מ״ל)':''));
-  const mm=eventsOn(k).filter(e=>e.type==='mmed');if(mm.length)L.push('תרופות של אמא: '+mm.map(e=>[e.name,doseTxt(e),hm(e.t)].filter(Boolean).join(' ')).join(', '));
+  if(st.water||wGoal())L.push('מים ל'+MOM()+': '+st.water+(wGoal()?' מתוך '+wGoal():'')+' בקבוקים'+(wSet().ml&&st.water?' (כ-'+st.water*wSet().ml+' מ״ל)':''));
+  const mm=eventsOn(k).filter(e=>e.type==='mmed');if(mm.length)L.push('תרופות של '+MOM()+': '+mm.map(e=>[e.name,doseTxt(e),hm(e.t)].filter(Boolean).join(' ')).join(', '));
   if(st.weights.length)L.push('משקל: '+st.weights.map(e=>e.kg+' ק״ג').join(', '));
   const fl=flagsFor(k);if(fl.length){L.push('');L.push('לתשומת לב (לא אבחנה):');fl.forEach(f=>L.push('• '+f))}
   const notes=st.notes.filter(e=>e.note);if(notes.length){L.push('');L.push('הערות:');notes.forEach(e=>L.push('• '+hm(e.t)+' '+T[e.type].l+': '+e.note))}
@@ -542,12 +554,14 @@ function renderHome(){
     <div class="stat"><span>חיתול אחרון</span><b class="num">${ld?ago(ld.t).replace('לפני ',''):'—'}</b><span>${ld?KIND[ld.kind]:'עוד לא נרשם'}</span></div>
     <div class="stat"><span>שינה</span><b class="num">${ts?'ישנה':ls?ago(ls.end||ls.t).replace('לפני ',''):'—'}</b><span>${ts?'מ-'+hm(ts.start):ls?'מאז שהתעוררה':'עוד לא נרשם'}</span></div>
   </div>`;
-  const items=[['feed',lastOf(['feed'])],['bottle',lastOf(['bottle'])],['pump',lastOf(['pump'])],['diaper',ld],['sleep',ls],['q',null]].filter(([k])=>!(k==='bottle'||k==='pump')||feat(k));
+  const items=[['feed',lastOf(['feed'])],['bottle',lastOf(['bottle'])],['pump',lastOf(['pump'])],['diaper',ld],['sleep',ls],['q',null],['water',null]].filter(([k])=>!(k==='bottle'||k==='pump')||feat(k));
   h+=`<div class="grid${items.length===4?' two':''}">${items.map(([k,e])=>{
     const live=(k==='feed'&&tf)||(k==='sleep'&&ts);
+    if(k==='water'){const ws=waterState(),pct=ws.goal?Math.min(100,ws.cnt/ws.goal*100):0;
+      return `<button class="act" type="button" data-wadd="1" aria-label="הוספת בקבוק מים"><span class="circle" style="background:${ws.goal?`conic-gradient(var(--i-bottle) ${pct}%, var(--c-bottle) 0)`:'var(--c-bottle)'};color:var(--i-bottle)"><span class="wfill">${IC.wbottle}</span></span><span class="lbl">מים ל${esc(MOM())}</span><span class="ago num">${ws.goal?ws.cnt+'/'+ws.goal+' בקבוקים':ws.cnt?ws.cnt+' היום':'+ בקבוק'}</span></button>`}
     const sub=k==='q'?(openQs()?openQs()+' פתוחות':''):live?'פעיל':e?ago(k==='sleep'?(e.end||e.t):e.t):'';
     return `<button class="act" type="button" data-open="${k}"><span class="circle${live?' live':''}" style="background:var(--c-${T[k].c});color:var(--i-${T[k].c})">${IC[k]}</span><span class="lbl">${k==='q'?'שאלה לרופאה':T[k].l}</span><span class="ago">${sub}</span></button>`}).join('')}</div>`;
-  h+=`<div class="more"><button type="button" data-open="med">+ ויטמין / תרופה לתינוקת</button><button type="button" data-open="mmed">+ תרופה לאמא</button><button type="button" data-open="weight">+ משקל</button><button type="button" data-open="note">+ הערה</button></div>`;
+  h+=`<div class="more"><button type="button" data-open="med">+ ויטמין / תרופה לתינוקת</button><button type="button" data-open="mmed">+ תרופה ל${esc(MOM())}</button><button type="button" data-open="weight">+ משקל</button><button type="button" data-open="note">+ הערה</button></div>`;
   const k=dayKey(now),st=stats(eventsOn(k));
   h+=`<div class="today">היום: <b class="num">${st.feeds}</b> הנקות · ${feat('bottle')?`<b class="num">${st.bottles}</b> בקבוקים · `:''}<b class="num">${st.wet}</b> רטובים · <b class="num">${st.dirty}</b> קקי · שינה <b class="num">${durTxt(st.sleepMin)}</b>
    <div class="row" style="margin-top:10px"><button class="btn small" type="button" data-share="${k}">שיתוף סיכום יומי</button><button class="btn small" type="button" data-goto="log">ליומן המלא</button></div></div>`;
@@ -576,12 +590,7 @@ function waterHTML(){
   const ws=waterState();if(!ws.goal)return '';
   const pct=Math.min(100,ws.cnt/ws.goal*100),exp=ws.frac*100;
   let h='';
-  if(ws.behind>=1&&ws.now>(localOnly.wSnooze||0))h+=`<div class="banner"><span class="grow">💧 שתית ${ws.cnt} מתוך ${ws.goal} בקבוקים. לפי השעה כדאי להיות כבר ב-${ws.expected}.</span><button type="button" data-wadd="1">+ בקבוק</button><button type="button" data-wsnooze="1">עוד שעה</button></div>`;
-  h+=`<div class="water"><span class="ic" style="background:var(--c-bottle);color:var(--i-bottle)">${IC.water}</span>
-   <div class="grow"><div><b>מים לאמא</b> <span class="num" style="white-space:nowrap">· <b>${ws.cnt}</b>/${ws.goal} בקבוקים</span></div>
-   <div class="wbar" role="progressbar" aria-valuemin="0" aria-valuemax="${ws.goal}" aria-valuenow="${ws.cnt}" aria-label="בקבוקי מים"><i style="width:${pct}%"></i>${ws.frac>0&&ws.frac<1?`<em style="inset-inline-start:${exp}%" title="איפה כדאי להיות לפי השעה"></em>`:''}</div>
-   <div class="note">${ws.cnt>=ws.goal?'הגעת ליעד היום 🎉':ws.frac>0&&ws.frac<1?'לפי השעה: '+ws.expected+' בקבוקים':ws.frac>=1?'היום נגמר':'היום מתחיל ב-'+esc(wSet().start)}</div></div>
-   <div class="wbtns"><button type="button" class="btn small" data-wdel="1" aria-label="הסרת הבקבוק האחרון"${ws.cnt?'':' disabled'}>−</button><button type="button" class="btn pri" data-wadd="1">+ בקבוק</button></div></div>`;
+  if(ws.behind>=1&&ws.now>(localOnly.wSnooze||0))h+=`<div class="banner"><span class="grow">💧 ${esc(MOM())}, שתית ${ws.cnt} מתוך ${ws.goal} בקבוקים. לפי השעה כדאי להיות כבר ב-${ws.expected}.</span><button type="button" data-wadd="1">+ בקבוק</button><button type="button" data-wsnooze="1">עוד שעה</button></div>`;
   return h;
 }
 let waterSeen='';
@@ -614,8 +623,8 @@ function dueReminders(){
   if(set.feedEvery>0&&!S.timers.feed){const lf=lastOf(['feed','bottle']);if(lf&&now-lf.t>=set.feedEvery*3600e3&&now>(localOnly.snooze||0))out.push({id:'feed',txt:'עברו '+durTxt((now-lf.t)/60000)+' מה'+feedWord()+' האחרונה',act:'feed',actL:'תיעוד הנקה',snooze:true})}
   (set.daily||[]).forEach(r=>{
     const [H,M]=(r.time||'09:00').split(':').map(Number);const due=new Date();due.setHours(H,M,0,0);
-    const given=eventsOn(k).some(e=>e.type==='med'&&e.name===r.label);
-    if(now>=due.getTime()&&!given&&localOnly.dismiss[r.id]!==k)out.push({id:r.id,txt:r.label+' · '+r.time,med:r.label,actL:'ניתן עכשיו'});
+    const mom=r.who==='mom',given=eventsOn(k).some(e=>e.type===(mom?'mmed':'med')&&e.name===r.label);
+    if(now>=due.getTime()&&!given&&localOnly.dismiss[r.id]!==k)out.push({id:r.id,txt:(mom?'💊 '+MOM()+': ':'')+r.label+' · '+r.time,med:r.label,mom,actL:mom?'נלקח עכשיו':'ניתן עכשיו'});
   });
   return out;
 }
@@ -623,7 +632,7 @@ function remindersHTML(){
   let b='';const k=dayKey(Date.now());
   if(cfg.url&&sync.status==='err'&&navigator.onLine!==false)b+=`<div class="banner"><span class="grow">הסנכרון לגוגל שיטס לא הושלם</span><button type="button" data-goto="prefs">לפרטים</button></div>`;
   else if(!cfg.url&&recent(30).length>=5&&localOnly.dismiss.backup!==k)b+=`<div class="banner"><span class="grow">כדאי לחבר גיבוי לגוגל שיטס כדי שהמידע לא יאבד</span><button type="button" data-goto="prefs">חיבור</button><button type="button" id="bkLater">לא היום</button></div>`;
-  return b+dueReminders().map(r=>`<div class="banner"><span class="grow">${esc(r.txt)}</span>${r.act?`<button type="button" data-open="${r.act}">${r.actL}</button>`:`<button type="button" data-givemed="${esc(r.med)}">${r.actL}</button>`}${r.snooze?`<button type="button" data-snooze="1">עוד 15 דק׳</button>`:`<button type="button" data-dismiss="${r.id}">לא היום</button>`}</div>`).join('')}
+  return b+dueReminders().map(r=>`<div class="banner"><span class="grow">${esc(r.txt)}</span>${r.act?`<button type="button" data-open="${r.act}">${r.actL}</button>`:`<button type="button" ${r.mom?'data-momtake':'data-givemed'}="${esc(r.med)}">${r.actL}</button>`}${r.snooze?`<button type="button" data-snooze="1">עוד 15 דק׳</button>`:`<button type="button" data-dismiss="${r.id}">לא היום</button>`}</div>`).join('')}
 let notified={};
 function notifyCheck(){
   try{if(!('Notification' in window)||Notification.permission!=='granted')return;
@@ -678,7 +687,7 @@ function renderTrends(){
   h+=chartCard('sleep','שעות שינה ביום',[{v:ss.map(s=>round1(s.sleepMin/60)),c:'var(--i-sleep)'}],lbl,keys,v=>v+' ש׳');
   if(feat('bottle'))h+=chartCard('bottle','מ״ל בבקבוקים ביום',[{v:ss.map(s=>s.bottleMl),c:'var(--i-bottle)'}],lbl,keys,v=>v+' מ״ל');
   if(feat('pump'))h+=chartCard('pump','מ״ל בשאיבה ביום',[{v:ss.map(s=>s.pumpMl),c:'var(--i-pump)'}],lbl,keys,v=>v+' מ״ל');
-  if(wGoal()||ss.some(s=>s.water))h+=chartCard('water','בקבוקי מים ביום (אמא)'+(wGoal()?' · יעד '+wGoal():''),[{v:ss.map(s=>s.water),c:'var(--i-bottle)'}],lbl,keys,v=>v+' בקבוקים');
+  if(wGoal()||ss.some(s=>s.water))h+=chartCard('water','בקבוקי מים ביום ('+MOM()+')'+(wGoal()?' · יעד '+wGoal():''),[{v:ss.map(s=>s.water),c:'var(--i-bottle)'}],lbl,keys,v=>v+' בקבוקים');
   const sides=ss.reduce((a,s)=>({R:a.R+s.R,L:a.L+s.L,B:a.B+s.B}),{R:0,L:0,B:0});
   h+=`<div class="card"><h2>פיזור צדדים בהנקה</h2><div class="num">ימין ${sides.R} · שמאל ${sides.L} · שניהם ${sides.B}</div></div>`;
   h+=weightCard();
@@ -752,13 +761,14 @@ function renderPrefs(){
   const s=S.settings;
   let h=`<div class="card"><h2>התינוקת</h2>
    <label class="f" for="pName">שם</label><input class="in" id="pName" value="${esc(s.name)}" placeholder="שם התינוקת">
-   <label class="f" for="pBirth">תאריך לידה</label><input class="in" type="date" id="pBirth" value="${esc(s.birth)}"></div>`;
+   <label class="f" for="pBirth">תאריך לידה</label><input class="in" type="date" id="pBirth" value="${esc(s.birth)}">
+   <label class="f" for="pMom">איך לקרוא לאמא באפליקציה</label><input class="in" id="pMom" value="${esc(s.momName||'')}" placeholder="אמא"></div>`;
   h+=`<div class="card"><h2>סוגי דיווח</h2><p class="note" style="margin-top:0">מה שכבוי לא מופיע במסך הראשי ובדוחות. אפשר להפעיל בכל זמן.</p>
    ${[['bottle','בקבוק'],['pump','שאיבה']].map(([k,l])=>`<div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span>${l}</span><div class="seg"><button type="button" data-feat="${k}" data-on="1" class="${feat(k)?'on':''}">פעיל</button><button type="button" data-feat="${k}" data-on="0" class="${feat(k)?'':'on'}">כבוי</button></div></div>`).join('')}</div>`;
   h+=`<div class="card"><h2>תזכורות</h2>
    <label class="f">תזכורת ${feedWord()} אחרי</label><div class="seg" id="pEvery">${[0,2,2.5,3,3.5,4].map(v=>`<button type="button" data-every="${v}" class="${+s.feedEvery===v?'on':''}">${v?v+' ש׳':'כבוי'}</button>`).join('')}</div>
    <label class="f">תזכורות קבועות כל יום</label>
-   ${(s.daily||[]).map(r=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span style="flex:1">${esc(r.label)}</span><span class="num">${esc(r.time)}</span><button class="btn small" type="button" data-rdel="${r.id}">הסרה</button></div>`).join('')||'<div class="note">אין</div>'}
+   ${(s.daily||[]).filter(r=>r.who!=='mom').map(r=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span style="flex:1">${esc(r.label)}</span><span class="num">${esc(r.time)}</span><button class="btn small" type="button" data-rdel="${r.id}">הסרה</button></div>`).join('')||'<div class="note">אין</div>'}
    <div class="row" style="margin-top:8px;flex-wrap:nowrap"><input class="in" id="rLabel" placeholder="למשל: ויטמין D" aria-label="שם התזכורת"><input class="in" type="time" id="rTime" value="09:00" style="max-width:120px" aria-label="שעה"><button class="btn" type="button" id="rAdd">הוספה</button></div>
    <p class="note">התזכורות מופיעות כשהיומן פתוח. התראה לטלפון כשהוא סגור לא תמיד עובדת מתוך דף כזה, לכן לתזכורות קבועות כדאי להגדיר גם תזכורת בטלפון.</p>
    <button class="btn small" type="button" id="pNotif">לנסות לאפשר התראות</button>
@@ -767,14 +777,18 @@ function renderPrefs(){
    <label class="f" for="pGap">פער בין ${feat('bottle')?'האכלות':'הנקות'} (שעות)</label><input class="in" type="number" inputmode="decimal" step="0.5" min="0" id="pGap" value="${s.gapH}">
    <label class="f" for="pWet">מינימום חיתולים רטובים ביום</label><input class="in" type="number" inputmode="numeric" min="0" id="pWet" value="${s.minWet}"></div>`;
   const w=wSet();
-  h+=`<div class="card"><h2>מעקב מים לאמא</h2><p class="note" style="margin-top:0">כמה בקבוקים לסיים ביום. אם לפי השעה הקצב מאחור, יופיע תזכורת כשהיומן פתוח. 0 = כבוי.</p>
+  h+=`<div class="card"><h2>מעקב מים ל${esc(MOM())}</h2><p class="note" style="margin-top:0">כמה בקבוקים לסיים ביום. אם לפי השעה הקצב מאחור, יופיע תזכורת כשהיומן פתוח. 0 = כבוי.</p>
    <div class="row" style="flex-wrap:nowrap"><div style="flex:1"><label class="f" for="wGoal">בקבוקים ביום</label><input class="in" type="number" inputmode="numeric" min="0" max="30" id="wGoal" data-water="goal" value="${+w.goal||0}"></div>
    <div style="flex:1"><label class="f" for="wMl">גודל בקבוק (מ״ל, לא חובה)</label><input class="in" type="number" inputmode="numeric" min="0" id="wMl" data-water="ml" value="${+w.ml||''}" placeholder="למשל 750"></div></div>
    <div class="row" style="flex-wrap:nowrap"><div style="flex:1"><label class="f" for="wStart">היום מתחיל ב-</label><input class="in" type="time" id="wStart" data-water="start" value="${esc(w.start)}"></div>
    <div style="flex:1"><label class="f" for="wEnd">ומסתיים ב-</label><input class="in" type="time" id="wEnd" data-water="end" value="${esc(w.end)}"></div></div>
    <p class="note">הקצב מחולק שווה על פני השעות האלה. למשל 8 בקבוקים בין 07:00 ל-22:00: בצהריים כדאי להיות בערך ב-2–3.</p></div>`;
-  h+=`<div class="card"><h2>תרופות לאמא · זמן בין מנות</h2><p class="note" style="margin-top:0">כמה שעות צריך לחכות בין מנה למנה, לפי ההנחיה שקיבלתם. אחרי שנרשמת מנה, במסך הבית יופיע שעון שסופר עד שאפשר לקחת שוב. ריק = בלי שעון.</p>
-   ${PAIN.map(n=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line);flex-wrap:nowrap"><span style="flex:1">${esc(n)}</span><input class="in" type="number" inputmode="decimal" step="0.5" min="0" data-mgap="${esc(n)}" value="${momGap(n)||''}" placeholder="שעות" style="max-width:110px" aria-label="שעות בין מנות של ${esc(n)}"><span class="note">שעות</span></div>`).join('')}</div>`;
+  h+=`<div class="card"><h2>תרופות ותוספים ל${esc(MOM())}</h2><p class="note" style="margin-top:0">כמה שעות צריך לחכות בין מנה למנה, לפי ההנחיה שקיבלתם. אחרי שנרשמת מנה, במסך הבית יופיע שעון שסופר עד שאפשר לקחת שוב. ריק = בלי שעון.</p>
+   ${momNames().map(n=>{const r=(s.daily||[]).find(x=>x.who==='mom'&&x.label===n);return `<div class="mrow"><b>${esc(n)}</b>
+     ${PAIN.includes(n)?`<label>בין מנות <input class="in" type="number" inputmode="decimal" step="0.5" min="0" data-mgap="${esc(n)}" value="${momGap(n)||''}" placeholder="—" aria-label="שעות בין מנות של ${esc(n)}"> שעות</label>`:''}
+     <label>תזכורת כל יום <input class="in" type="time" data-mrem="${esc(n)}" value="${r?esc(r.time):''}" aria-label="שעת תזכורת יומית ל${esc(n)}"></label>${r?`<button class="btn small" type="button" data-mremdel="${esc(n)}">בלי תזכורת</button>`:''}</div>`}).join('')}
+   <div class="row" style="margin-top:10px;flex-wrap:nowrap"><input class="in" id="mNew" type="text" autocomplete="off" placeholder="תרופה או תוסף נוסף, למשל ברזל" aria-label="שם תרופה או תוסף"><button class="btn" type="button" id="mAdd">הוספה</button></div>
+   <p class="note">תזכורת יומית מופיעה כבאנר נפרד במסך הבית מהשעה שבחרתם, עד שנרשם שזה נלקח באותו יום.</p></div>`;
   h+=`<div class="card"><h2>ויטמינים ותרופות לבחירה מהירה</h2><input class="in" id="pMeds" value="${esc((s.meds||[]).join(', '))}" aria-label="רשימה מופרדת בפסיקים"><p class="note">מפרידים בפסיקים.</p></div>`;
   const pend=outbox.length+photoOut.length;
   h+=`<div class="card" id="syncCard"><h2>גיבוי וסנכרון בגוגל שיטס</h2>
@@ -841,7 +855,7 @@ const FLOWS={
   ],
   med:[{k:'name',q:'מה ניתן?',opts:()=>[...(S.settings.meds||[]).map(m=>opt(m,m)),opt('other','אחר…')],final:1}],
   mmed:[
-    {k:'name',q:'מה אמא לקחה?',opts:()=>[...MOM_MEDS.map(([n])=>{const l=lastMom(n),nx=nextDose(n);return opt(n,n,{sub:nx&&nx>Date.now()?'אפשר שוב ב-'+hm(nx):l?'אחרונה '+ago(l.t):''})}),opt('other','אחר…')],next:v=>momDose(v)?1:'save'},
+    {k:'name',get q(){return 'מה '+MOM()+' לקחה?'},opts:()=>[...momNames().map(n=>{const l=lastMom(n),nx=nextDose(n);return opt(n,n,{sub:nx&&nx>Date.now()?'אפשר שוב ב-'+hm(nx):l?'אחרונה '+ago(l.t):''})}),opt('other','אחר…')],next:v=>momDose(v)?1:'save'},
     {k:'dose',q:'איזה מינון?',opts:()=>{const m=momDose(F.d.name)||{u:'',d:[]};return [...m.d.map(x=>opt(x,x+'',{sub:m.u})),opt('other','אחר…')]},cls:'three',final:1}
   ]
 };
@@ -858,8 +872,8 @@ function openFlow(type){
 }
 function head(title,type,dots){return `<div class="sh-head">${F.hist&&F.hist.length?`<button class="iconbtn" type="button" id="shBack" aria-label="חזרה">→</button>`:''}<span class="ic" style="background:var(--c-${T[type].c});color:var(--i-${T[type].c})">${IC[type]}</span><h2 id="shTitle">${title}</h2>${dots||''}<button class="iconbtn" type="button" id="shClose" aria-label="סגירה">×</button></div>`}
 function whenRow(label){
-  const offs=[0,5,10,15,30,60];
-  return `<div class="when"><span>${label||'מתי:'}</span>${offs.map(o=>`<button type="button" data-off="${o}" class="${!F.abs&&F.off===o?'on':''}">${o===0?'עכשיו':o<60?'לפני '+o+'′':'לפני שעה'}</button>`).join('')}<input type="time" id="absTime" aria-label="שעה אחרת" value="${F.abs?hm(F.abs):''}" class="${F.abs?'on':''}"></div>`;
+  const offs=[0,5,10,15,30];
+  return `<div class="when"><span>${label||'מתי:'}</span>${offs.map(o=>`<button type="button" data-off="${o}" class="${!F.abs&&F.off===o?'on':''}">${o===0?'עכשיו':'לפני '+o+'′'}</button>`).join('')}<span class="mt"><button type="button" id="absBtn" class="${F.abs?'on':''}">🕒 ${F.abs?hm(F.abs):'ידני'}</button><input type="time" id="absTime" aria-label="הכנסת שעה ידנית" value="${F.abs?hm(F.abs):''}"></span></div>`;
 }
 function noteBlock(step){
   const tags=step&&step.tags;
@@ -907,13 +921,13 @@ function renderStep(){
   let h=head(T[F.type].l,F.type,dots)+(F.d.t!=null?'':whenRow(F.type==='mmed'?'מתי נלקח:':undefined));
   const cur=F.d[st.k];
   h+=`<h3 class="q">${st.q}</h3><div class="opts ${st.cls||''}">${st.opts().filter(o=>!(o.v==='timer'&&F.fromFeed)).map(o=>`<button type="button" class="opt${o.wide?' wide':''}${o.hi?' hi':''}${o.sug&&cur==null?' sug':''}${cur!=null&&String(cur)===String(o.v)?' sel':''}" data-pick="${esc(o.v)}">${o.sw?`<span class="sw" style="background:${o.sw}"></span>`:''}${esc(o.l)}${o.sub?`<small>${esc(o.sub)}</small>`:''}</button>`).join('')}</div>`;
-  if(F.other===st.k)h+=`<div class="row" style="margin-top:10px;flex-wrap:nowrap"><input class="in" type="number" inputmode="decimal" id="otherIn" placeholder="${st.k==='dur'?'דקות':st.k==='ml'?'מ״ל':st.k==='dose'?((momDose(F.d.name)||{}).u||'מינון'):st.k==='name'?'שם התרופה':''}" ${st.k==='name'?'type="text"':''}><button class="btn pri" type="button" id="otherOk">אישור</button></div>`;
+  if(F.other===st.k)h+=`<div class="row" style="margin-top:10px;flex-wrap:nowrap"><input class="in" ${st.k==='name'?'type="text" autocomplete="off"':'type="number" inputmode="decimal"'} id="otherIn" placeholder="${st.k==='dur'?'דקות':st.k==='ml'?'מ״ל':st.k==='dose'?((momDose(F.d.name)||{}).u||'מינון'):st.k==='name'?'שם התרופה':''}" ${st.k==='name'?'type="text"':''}><button class="btn pri" type="button" id="otherOk">אישור</button></div>`;
   h+=noteBlock(st);
   const canNext=cur!=null||st.skip;
   h+=`<div class="nav2">${F.hist.length?`<button class="btn" type="button" id="shBack2">→ הקודם</button>`:''}${canNext?`<button class="btn${st.final||cur!=null?' pri':''}" type="button" id="goNext">${st.final?'לסיכום ←':cur!=null?'הבא ←':'דילוג ←'}</button>`:''}</div>
    ${F.i>0&&!st.final?`<div class="sh-foot"><button class="btn" type="button" id="saveNow">לסיכום בלי לענות על השאר</button></div>`:''}`;
   sheet.innerHTML=h;
-  if(F.other===st.k){const i=$('#otherIn');if(st.k==='name')i.type='text';i.focus()}
+  if(F.other===st.k)$('#otherIn').focus();
 }
 function pick(v){
   const flow=FLOWS[F.type],st=flow[F.i];
@@ -968,6 +982,7 @@ function commit(extra){
   const e={...F.d,...(F.extra||{}),...(extra||{}),id:uid()};
   if(e.t==null)e.t=getT();
   if(e.type==='mmed'&&e.dose&&!e.unit){const m=momDose(e.name);if(m)e.unit=m.u}
+  if(e.type==='mmed'&&e.name&&!momNames().includes(e.name)){S.settings={...S.settings,momExtra:[...(S.settings.momExtra||[]),e.name].slice(-10)};saveSettings()}
   if(!e.tags||!e.tags.length)delete e.tags;if(!e.note)delete e.note;if(!e.photos||!e.photos.length)delete e.photos;
   putEvent(e);closeSheet();
   if(fromFeed){S.timers={...S.timers,feed:null};saveTimers()}
@@ -1096,6 +1111,7 @@ document.addEventListener('click',ev=>{
   if(d.share){openShare(d.share);return}
   if(d.snooze){localOnly.snooze=Date.now()+15*6e4;persistUI();renderAll();return}
   if(d.dismiss){localOnly.dismiss[d.dismiss]=dayKey(Date.now());persistUI();renderAll();return}
+  if(d.momtake){const n=d.momtake;if(momDose(n)){openFlow('mmed');F.d.name=n;F.hist=[0];F.i=1;renderStep()}else{const e={id:uid(),type:'mmed',name:n,t:Date.now()};putEvent(e);toast('נרשם: '+n,'ביטול',()=>removeEvent(e))}return}
   if(d.givemed){putEvent({id:uid(),type:'med',name:d.givemed,t:Date.now()});toast('נרשם: '+d.givemed);return}
   if(d.day){logDayTouched=true;logDay=addDays(logDay,+d.day);if(logDay>dayKey(Date.now()))logDay=dayKey(Date.now());renderLog();return}
   if(d.edit){openEdit(d.edit,d.k);return}
@@ -1116,13 +1132,14 @@ document.addEventListener('click',ev=>{
   /* sheet-scoped */
   if(!F&&!el.closest('#sheet'))return handleMisc(el);
   if(el.id==='shClose'||el.id==='shClose2'){closeSheet();return}
+  if(el.id==='absBtn'){const i=$('#absTime');if(!i.value)i.value=hm(Date.now());try{i.showPicker();return}catch(e){}i.classList.add('show');i.focus();return}
   if(el.id==='shBack'||el.id==='shBack2'){backStep();return}
   if(el.id==='goNext'){keepNote();goNext();return}
   if(el.id==='rvSave'){commit();return}
   if(el.id==='rvDel'){keepNote();F.delAsk=1;renderReview();return}
   if(el.id==='rvDelNo'){F.delAsk=0;renderReview();return}
   if(el.id==='rvDelYes'){if(F.fromFeed)S.timers={...S.timers,feed:null};if(F.fromSleep)S.timers={...S.timers,sleep:null};if(F.fromFeed||F.fromSleep)saveTimers();closeSheet();toast('הדיווח נמחק ולא נשמר');return}
-  if(d.off!==undefined){F.off=+d.off;F.abs=null;el.parentNode.querySelectorAll('[data-off]').forEach(b=>b.classList.toggle('on',b===el));const a=$('#absTime');if(a){a.value='';a.classList.remove('on')}if(F.review){keepNote();renderReview()}return}
+  if(d.off!==undefined){F.off=+d.off;F.abs=null;el.parentNode.querySelectorAll('[data-off]').forEach(b=>b.classList.toggle('on',b===el));const a=$('#absTime');if(a){a.value='';a.classList.remove('show')}const ab=$('#absBtn');if(ab){ab.classList.remove('on');ab.textContent='🕒 ידני'}if(F.review){keepNote();renderReview()}return}
   if(d.pick!==undefined){pick(d.pick);return}
   if(d.tag){const tg=d.tag,tags=F.d.tags;F.d.tags=tags.includes(tg)?tags.filter(x=>x!==tg):[...tags,tg];el.classList.toggle('on');return}
   if(el.id==='noteOpen'){F.noteOpen=1;el.outerHTML=`<label class="f" for="shNote">הערה</label><textarea class="in" id="shNote" placeholder="הערה קצרה"></textarea>`;$('#shNote').focus();return}
@@ -1156,6 +1173,8 @@ function handleMisc(el){
   if(el.id==='qAdd'){const i=$('#qNew'),v=i.value.trim();if(!v)return i.focus();putQ({id:uid(),text:v,t:Date.now(),done:false});return}
   if(el.id==='visitDone'){S.settings={...S.settings,lastVisit:dayKey(Date.now())};Object.values(S.questions).filter(q=>!q.done).forEach(()=>{});visitFrom=null;saveSettings();toast('נרשם. הסיכום הבא יתחיל מהיום.');return}
   if(el.id==='vDl'){saveFile('סיכום-לביקור-'+dayKey(Date.now())+'.txt',visitText(visitFrom));return}
+  if(el.dataset.mremdel){const n=el.dataset.mremdel;S.settings={...S.settings,daily:(S.settings.daily||[]).filter(x=>!(x.who==='mom'&&x.label===n))};saveSettings();renderPrefs();return}
+  if(el.id==='mAdd'){const n=($('#mNew').value||'').trim();if(!n)return;if(!momNames().includes(n))S.settings={...S.settings,momExtra:[...(S.settings.momExtra||[]),n]};saveSettings();renderPrefs();toast('נוסף: '+n);return}
   if(el.id==='rAdd'){const l=$('#rLabel').value.trim(),t=$('#rTime').value;if(!l||!t)return;S.settings={...S.settings,daily:[...(S.settings.daily||[]),{id:uid(),label:l,time:t}],meds:(S.settings.meds||[]).includes(l)?S.settings.meds:[...(S.settings.meds||[]),l]};saveSettings();renderPrefs();return}
   if(el.id==='pNotif'){try{if(!('Notification' in window))throw 0;Notification.requestPermission().then(p=>toast(p==='granted'?'התראות הופעלו (כשהיומן פתוח ברקע)':'הדפדפן לא אישר התראות כאן')).catch(()=>toast('התראות לא זמינות בתוך הדף הזה'))}catch(e){toast('התראות לא זמינות בתוך הדף הזה')}return}
   if(el.id==='exTsv'){copyText(toTSV(tableRows()));return}
@@ -1175,14 +1194,17 @@ function handleMisc(el){
 }
 document.addEventListener('change',ev=>{
   const el=ev.target;
-  if(el.id==='absTime'&&F){const [H,M]=el.value.split(':').map(Number);if(isNaN(H))return;const d=new Date();d.setHours(H,M,0,0);if(d.getTime()>Date.now()+6e4)d.setDate(d.getDate()-1);F.abs=d.getTime();el.classList.add('on');el.parentNode.querySelectorAll('[data-off]').forEach(b=>b.classList.remove('on'));if(F.review){keepNote();renderReview()}return}
+  if(el.id==='absTime'&&F){const [H,M]=el.value.split(':').map(Number);if(isNaN(H))return;const d=new Date();d.setHours(H,M,0,0);if(d.getTime()>Date.now()+6e4)d.setDate(d.getDate()-1);F.abs=d.getTime();const ab=$('#absBtn');if(ab){ab.classList.add('on');ab.textContent='🕒 '+hm(F.abs)}el.closest('.when').querySelectorAll('[data-off]').forEach(b=>b.classList.remove('on'));if(F.review){keepNote();renderReview()}return}
   if(el.dataset.qdone){const q=S.questions[el.dataset.qdone];if(q)putQ({...q,done:el.checked});return}
   if(el.id==='vFrom'){visitFrom=el.value||addDays(dayKey(Date.now()),-6);renderDoctor();return}
   if(el.id==='pName'){S.settings={...S.settings,name:el.value.trim()};saveSettings();return}
+  if(el.id==='pMom'){S.settings={...S.settings,momName:el.value.trim()};saveSettings();return}
   if(el.id==='pBirth'){S.settings={...S.settings,birth:el.value};saveSettings();return}
   if(el.id==='pGap'){S.settings={...S.settings,gapH:+el.value||0};saveSettings();return}
   if(el.id==='pWet'){S.settings={...S.settings,minWet:+el.value||0};saveSettings();return}
   if(el.dataset.water){const k=el.dataset.water,v=k==='start'||k==='end'?el.value:Math.max(0,+el.value||0);if((k==='start'||k==='end')&&!v)return;S.settings={...S.settings,water:{...wSet(),[k]:v}};saveSettings();return}
+  if(el.dataset.mrem){const n=el.dataset.mrem,t=el.value,rest=(S.settings.daily||[]).filter(x=>!(x.who==='mom'&&x.label===n));
+    S.settings={...S.settings,daily:t?[...rest,{id:'mom-'+uid(),label:n,time:t,who:'mom'}]:rest};saveSettings();renderPrefs();return}
   if(el.dataset.mgap){const v=Math.max(0,+String(el.value).replace(',','.')||0);S.settings={...S.settings,momGap:{...(S.settings.momGap||{}),[el.dataset.mgap]:v||undefined}};saveSettings();return}
   if(el.id==='pMeds'){S.settings={...S.settings,meds:el.value.split(/[,،]/).map(s=>s.trim()).filter(Boolean)};saveSettings();return}
   if(el.id==='imFile'){const f=el.files&&el.files[0];if(!f)return;f.text().then(txt=>importData(JSON.parse(txt))).catch(()=>toast('הקובץ לא נקרא. צריך קובץ גיבוי מהיומן.'));el.value='';return}
