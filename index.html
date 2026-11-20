@@ -26,6 +26,7 @@
   --c-diaper:#F2E8C8; --i-diaper:#80641C;
   --c-sleep:#D7DDF1; --i-sleep:#3B4882;
   --c-q:#D3EADF; --i-q:#2B6A50;
+  --c-weight:#F3E0CC; --i-weight:#8A5426;
   --s-wet:#3F7FB5; --s-dirty:#B98A2C;
   --font-display:"Rubik", "Arial Hebrew", system-ui, sans-serif;
   --font-body:"Varela Round", "Arial Hebrew", system-ui, sans-serif;
@@ -37,7 +38,7 @@
     --bg:#131A1B; --surface:#1C2526; --ink:#E3ECEA; --muted:#97AAA6; --line:#2D3A3B; --accent:#7CC2BA; --accent-ink:#0F1E1D;
     --warn-bg:#3A2E15; --warn-ink:#F1D08E; --ok:#7FD0A8;
     --c-feed:#43302D; --i-feed:#F2B8AC; --c-bottle:#24384A; --i-bottle:#A9D0EE; --c-pump:#332D48; --i-pump:#C9BEF0;
-    --c-diaper:#3D3622; --i-diaper:#EBD493; --c-sleep:#2A3150; --i-sleep:#BFC8F2; --c-q:#21392F; --i-q:#9FDABD;
+    --c-diaper:#3D3622; --i-diaper:#EBD493; --c-sleep:#2A3150; --i-sleep:#BFC8F2; --c-q:#21392F; --i-q:#9FDABD; --c-weight:#3F3123; --i-weight:#F0C59A;
     --s-wet:#4F92CF; --s-dirty:#B5862A;
     color-scheme:dark;
   }
@@ -46,7 +47,7 @@
   --bg:#131A1B; --surface:#1C2526; --ink:#E3ECEA; --muted:#97AAA6; --line:#2D3A3B; --accent:#7CC2BA; --accent-ink:#0F1E1D;
   --warn-bg:#3A2E15; --warn-ink:#F1D08E; --ok:#7FD0A8;
   --c-feed:#43302D; --i-feed:#F2B8AC; --c-bottle:#24384A; --i-bottle:#A9D0EE; --c-pump:#332D48; --i-pump:#C9BEF0;
-  --c-diaper:#3D3622; --i-diaper:#EBD493; --c-sleep:#2A3150; --i-sleep:#BFC8F2; --c-q:#21392F; --i-q:#9FDABD;
+  --c-diaper:#3D3622; --i-diaper:#EBD493; --c-sleep:#2A3150; --i-sleep:#BFC8F2; --c-q:#21392F; --i-q:#9FDABD; --c-weight:#3F3123; --i-weight:#F0C59A;
   --s-wet:#4F92CF; --s-dirty:#B5862A;
   color-scheme:dark;
 }
@@ -174,8 +175,7 @@ nav.tabs button.on{color:var(--accent)}
 .when button{border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:7px 12px;font-size:13px;white-space:nowrap}
 .when button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .when .mt{position:relative;display:inline-flex}
-.when .mt input{position:absolute;inset:0;opacity:0;width:100%;pointer-events:none}
-.when .mt input.show{position:static;opacity:1;pointer-events:auto;margin-inline-start:6px}
+.when .mt input{position:absolute;inset:0;opacity:0;width:100%;height:100%;padding:0;margin:0;border:0;font-size:16px;cursor:pointer;-webkit-appearance:none;appearance:none}
 .when input{border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:5px 10px;font-size:14px}
 .q{font-size:24px;margin:6px 0 14px}
 .opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -218,6 +218,11 @@ nav.tabs button.on{color:var(--accent)}
 .water .ic svg{width:20px;height:20px}
 .water .grow{flex:1;min-width:0}
 .water .note{font-size:12px;margin-top:3px}
+.wbig{font-size:24px;font-family:var(--font-display);font-weight:600;text-align:center;direction:ltr}
+.wdiff{border-radius:14px;padding:12px 14px;margin:6px 0;background:var(--bg);font-size:16px}
+.wdiff.up{background:var(--c-q);color:var(--i-q)}
+.wdiff.down{background:var(--warn-bg);color:var(--warn-ink)}
+.wdiff .note{color:inherit;opacity:.8;margin-top:2px}
 .wfill{display:grid;place-items:center;width:78%;height:78%;border-radius:50%;background:var(--c-bottle)}
 .wfill svg{width:58%;height:58%}
 .mrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 0;border-bottom:1px solid var(--line)}
@@ -295,7 +300,7 @@ const IC={
 };
 const T={
  feed:{l:'הנקה',c:'feed'}, bottle:{l:'בקבוק',c:'bottle'}, pump:{l:'שאיבה',c:'pump'}, diaper:{l:'חיתול',c:'diaper'},
- sleep:{l:'שינה',c:'sleep'}, q:{l:'שאלה לרופאה',c:'q'}, med:{l:'ויטמין / תרופה',c:'q'}, weight:{l:'משקל',c:'bottle'}, note:{l:'הערה',c:'pump'}, mmed:{get l(){return 'תרופה ל'+MOM()},c:'feed'}, water:{get l(){return 'מים ל'+MOM()},c:'bottle'}
+ sleep:{l:'שינה',c:'sleep'}, q:{l:'שאלה לרופאה',c:'q'}, med:{l:'ויטמין / תרופה',c:'q'}, weight:{l:'משקל',c:'weight'}, note:{l:'הערה',c:'pump'}, mmed:{get l(){return 'תרופה ל'+MOM()},c:'feed'}, water:{get l(){return 'מים ל'+MOM()},c:'bottle'}
 };
 const SIDE={R:'ימין',L:'שמאל',B:'שני הצדדים'};
 const RATING={good:'טובה',ok:'בינונית',hard:'קשה'};
@@ -554,14 +559,16 @@ function renderHome(){
     <div class="stat"><span>חיתול אחרון</span><b class="num">${ld?ago(ld.t).replace('לפני ',''):'—'}</b><span>${ld?KIND[ld.kind]:'עוד לא נרשם'}</span></div>
     <div class="stat"><span>שינה</span><b class="num">${ts?'ישנה':ls?ago(ls.end||ls.t).replace('לפני ',''):'—'}</b><span>${ts?'מ-'+hm(ts.start):ls?'מאז שהתעוררה':'עוד לא נרשם'}</span></div>
   </div>`;
-  const items=[['feed',lastOf(['feed'])],['bottle',lastOf(['bottle'])],['pump',lastOf(['pump'])],['diaper',ld],['sleep',ls],['q',null],['water',null]].filter(([k])=>!(k==='bottle'||k==='pump')||feat(k));
+  const items=[['feed',lastOf(['feed'])],['bottle',lastOf(['bottle'])],['pump',lastOf(['pump'])],['diaper',ld],['sleep',ls],['q',null],['water',null],['weight',lastOf(['weight'])||lastWeight()]].filter(([k])=>!(k==='bottle'||k==='pump')||feat(k));
   h+=`<div class="grid${items.length===4?' two':''}">${items.map(([k,e])=>{
     const live=(k==='feed'&&tf)||(k==='sleep'&&ts);
     if(k==='water'){const ws=waterState(),pct=ws.goal?Math.min(100,ws.cnt/ws.goal*100):0;
       return `<button class="act" type="button" data-wadd="1" aria-label="הוספת בקבוק מים"><span class="circle" style="background:${ws.goal?`conic-gradient(var(--i-bottle) ${pct}%, var(--c-bottle) 0)`:'var(--c-bottle)'};color:var(--i-bottle)"><span class="wfill">${IC.wbottle}</span></span><span class="lbl">מים ל${esc(MOM())}</span><span class="ago num">${ws.goal?ws.cnt+'/'+ws.goal+' בקבוקים':ws.cnt?ws.cnt+' היום':'+ בקבוק'}</span></button>`}
+    if(k==='weight'){const lw=lastWeight();
+      return `<button class="act" type="button" data-open="weight"><span class="circle" style="background:var(--c-weight);color:var(--i-weight)">${IC.weight}</span><span class="lbl">משקל</span><span class="ago num">${lw?kg3(lw.kg)+' ק״ג':''}</span></button>`}
     const sub=k==='q'?(openQs()?openQs()+' פתוחות':''):live?'פעיל':e?ago(k==='sleep'?(e.end||e.t):e.t):'';
     return `<button class="act" type="button" data-open="${k}"><span class="circle${live?' live':''}" style="background:var(--c-${T[k].c});color:var(--i-${T[k].c})">${IC[k]}</span><span class="lbl">${k==='q'?'שאלה לרופאה':T[k].l}</span><span class="ago">${sub}</span></button>`}).join('')}</div>`;
-  h+=`<div class="more"><button type="button" data-open="med">+ ויטמין / תרופה לתינוקת</button><button type="button" data-open="mmed">+ תרופה ל${esc(MOM())}</button><button type="button" data-open="weight">+ משקל</button><button type="button" data-open="note">+ הערה</button></div>`;
+  h+=`<div class="more"><button type="button" data-open="med">+ ויטמין / תרופה לתינוקת</button><button type="button" data-open="mmed">+ תרופה ל${esc(MOM())}</button><button type="button" data-open="note">+ הערה</button></div>`;
   const k=dayKey(now),st=stats(eventsOn(k));
   h+=`<div class="today">היום: <b class="num">${st.feeds}</b> הנקות · ${feat('bottle')?`<b class="num">${st.bottles}</b> בקבוקים · `:''}<b class="num">${st.wet}</b> רטובים · <b class="num">${st.dirty}</b> קקי · שינה <b class="num">${durTxt(st.sleepMin)}</b>
    <div class="row" style="margin-top:10px"><button class="btn small" type="button" data-share="${k}">שיתוף סיכום יומי</button><button class="btn small" type="button" data-goto="log">ליומן המלא</button></div></div>`;
@@ -867,13 +874,14 @@ function openFlow(type){
   F={type,i:0,d:{type,tags:[]},off:0,hist:[]};
   showSheet();
   if(type==='sleep')return sleepStep();
-  if(type==='q'||type==='note'||type==='weight')return textStep();
+  if(type==='weight')return weightStep();
+  if(type==='q'||type==='note')return textStep();
   renderStep();
 }
 function head(title,type,dots){return `<div class="sh-head">${F.hist&&F.hist.length?`<button class="iconbtn" type="button" id="shBack" aria-label="חזרה">→</button>`:''}<span class="ic" style="background:var(--c-${T[type].c});color:var(--i-${T[type].c})">${IC[type]}</span><h2 id="shTitle">${title}</h2>${dots||''}<button class="iconbtn" type="button" id="shClose" aria-label="סגירה">×</button></div>`}
 function whenRow(label){
   const offs=[0,5,10,15,30];
-  return `<div class="when"><span>${label||'מתי:'}</span>${offs.map(o=>`<button type="button" data-off="${o}" class="${!F.abs&&F.off===o?'on':''}">${o===0?'עכשיו':'לפני '+o+'′'}</button>`).join('')}<span class="mt"><button type="button" id="absBtn" class="${F.abs?'on':''}">🕒 ${F.abs?hm(F.abs):'ידני'}</button><input type="time" id="absTime" aria-label="הכנסת שעה ידנית" value="${F.abs?hm(F.abs):''}"></span></div>`;
+  return `<div class="when"><span>${label||'מתי:'}</span>${offs.map(o=>`<button type="button" data-off="${o}" class="${!F.abs&&F.off===o?'on':''}">${o===0?'עכשיו':'לפני '+o+'′'}</button>`).join('')}<span class="mt"><button type="button" id="absBtn" tabindex="-1" aria-hidden="true" class="${F.abs?'on':''}">🕒 ${F.abs?hm(F.abs):'ידני'}</button><input type="time" id="absTime" aria-label="הכנסת שעה ידנית" value="${F.abs?hm(F.abs):''}"></span></div>`;
 }
 function noteBlock(step){
   const tags=step&&step.tags;
@@ -1046,7 +1054,50 @@ function sleepStep(){
   sheet.innerHTML=head('שינה','sleep')+whenRow('נרדמה:')+`<h3 class="q">מה לרשום?</h3><div class="opts"><button type="button" class="opt wide hi" id="sStart">נרדמה · הפעלת טיימר</button><button type="button" class="opt wide" id="sManual">שינה שכבר הסתיימה</button></div>`;
 }
 
-/* text-based: question, note, weight */
+/* weight: direct entry, or mother+baby minus mother; then a confirm screen with the change since yesterday */
+const kg3=v=>(Math.round(+v*1000)/1000).toFixed(3);
+const pkg=v=>{const n=+String(v||'').replace(',','.').trim();return isFinite(n)&&n>0?n:0};
+const BABY=()=>S.settings.name||'התינוקת';
+function allWeights(){const w=[];for(const k in S.days)for(const id in S.days[k].ev){const e=S.days[k].ev[id];if(e&&!e.del&&e.type==='weight'&&+e.kg)w.push(e)}return w.sort((a,b)=>a.t-b.t)}
+const lastWeight=()=>allWeights().pop()||null;
+function weightStep(){
+  F.w=F.w||{mode:'direct',baby:'',mom:'',both:'',manual:false};const w=F.w,M=esc(MOM()),B=esc(BABY());
+  let h=head('משקל','weight')+whenRow();
+  if(F.cancelAsk){h+=`<div class="confirm" role="alertdialog" aria-labelledby="cfQ"><h3 class="q" id="cfQ">לבטל את הזנת המשקל?</h3><p>מה שהוזן לא יישמר.</p>
+    <div class="opts"><button type="button" class="opt" id="wCancelNo">לא, להמשיך</button><button type="button" class="opt danger" id="wCancelYes">כן, לבטל</button></div></div>`;sheet.innerHTML=h;return}
+  h+=`<div class="seg" style="margin-bottom:6px"><button type="button" data-wmode="direct" class="${w.mode==='direct'?'on':''}">הזנה רגילה</button><button type="button" data-wmode="calc" class="${w.mode==='calc'?'on':''}">חישוב: ${M} עם ${B} פחות ${M}</button></div>`;
+  if(w.mode==='calc')h+=`<label class="f" for="wMom">1. משקל ${M} (ק״ג)</label><input class="in" id="wMom" data-wf="mom" type="text" inputmode="decimal" value="${esc(w.mom)}" placeholder="למשל 62.4">
+    <label class="f" for="wBoth">2. משקל ${M} ו${B} יחד (ק״ג)</label><input class="in" id="wBoth" data-wf="both" type="text" inputmode="decimal" value="${esc(w.both)}" placeholder="למשל 65.6">`;
+  h+=`<label class="f" for="wBaby">${w.mode==='calc'?'3. ':''}משקל ${B} (ק״ג)${w.mode==='calc'?' · מחושב, אפשר לתקן':''}</label><input class="in wbig" id="wBaby" data-wf="baby" type="text" inputmode="decimal" value="${esc(w.baby)}" placeholder="למשל 3.850">
+   <div class="note" id="wMsg" style="min-height:18px;margin-top:6px"></div>
+   <div class="sh-foot"><button class="btn pri" type="button" id="wOk">אישור</button><button class="btn dang" type="button" id="wCancel">ביטול</button></div>`;
+  sheet.innerHTML=h;wHint();
+}
+function wInput(el){
+  const w=F.w;if(!w)return;w[el.dataset.wf]=el.value;
+  if(el.dataset.wf==='baby'&&w.mode==='calc')w.manual=true;
+  if(w.mode==='calc'&&el.dataset.wf!=='baby'&&!w.manual){const m=pkg(w.mom),b=pkg(w.both);const d=m&&b&&b>m?b-m:0;w.baby=d?kg3(d):'';const i=$('#wBaby');if(i)i.value=w.baby}
+  wHint();
+}
+function wHint(){const w=F.w,m=$('#wMsg');if(!m||!w)return;let t='';
+  if(w.mode==='calc'&&pkg(w.mom)&&pkg(w.both)&&pkg(w.both)<=pkg(w.mom))t='המשקל יחד צריך להיות גדול ממשקל '+MOM()+'.';
+  else if(w.mode==='calc'&&w.manual)t='המשקל תוקן ידנית.';
+  m.textContent=t}
+function weightConfirm(){
+  const kg=pkg(F.w.baby),t=getT(),B=esc(BABY());
+  const before=allWeights().filter(e=>e.t<t),y=addDays(dayKey(t),-1);
+  const yd=before.filter(e=>dayKey(e.t)===y).pop(),ref=yd||before.pop();
+  let h=head('משקל · לפני שמירה','weight');
+  h+=`<div class="rv"><b>${B}: ${kg3(kg)} ק״ג</b><div>${hm(t)}${dayKey(t)!==dayKey(Date.now())?' · '+dayLabel(dayKey(t)):''}</div></div>`;
+  if(ref){const g=Math.round((kg-ref.kg)*1000),since=yd?'מאתמול':'מהמדידה הקודמת ('+new Date(ref.t).toLocaleDateString('he-IL')+')';
+    h+=g>0?`<div class="wdiff up">עלייה של <b class="num">${g} גרם</b> ${since}<div class="note">אז: ${kg3(ref.kg)} ק״ג</div></div>`
+      :g<0?`<div class="wdiff down">❗ ירידה של <b class="num">${-g} גרם</b> ${since}<div class="note">אז: ${kg3(ref.kg)} ק״ג</div></div>`
+      :`<div class="wdiff">אותו משקל כמו ${since}</div>`}
+  else h+=`<div class="wdiff">זו המדידה הראשונה שנרשמה.</div>`;
+  h+=`<div class="sh-foot"><button class="btn pri" type="button" id="wSave">אישור</button><button class="btn" type="button" id="wBack">→ חזור</button></div>`;
+  sheet.innerHTML=h;
+}
+/* text-based: question, note */
 function textStep(){
   const t=F.type,ph=t==='q'?'מה תרצו לשאול את רופאת הילדים?':t==='note'?'מה לרשום?':'';
   let h=head(t==='q'?'שאלה לרופאה':T[t].l,t);
@@ -1132,7 +1183,6 @@ document.addEventListener('click',ev=>{
   /* sheet-scoped */
   if(!F&&!el.closest('#sheet'))return handleMisc(el);
   if(el.id==='shClose'||el.id==='shClose2'){closeSheet();return}
-  if(el.id==='absBtn'){const i=$('#absTime');if(!i.value)i.value=hm(Date.now());try{i.showPicker();return}catch(e){}i.classList.add('show');i.focus();return}
   if(el.id==='shBack'||el.id==='shBack2'){backStep();return}
   if(el.id==='goNext'){keepNote();goNext();return}
   if(el.id==='rvSave'){commit();return}
@@ -1157,6 +1207,13 @@ document.addEventListener('click',ev=>{
   if(d.sdur){keepNote();const end=getT(),dur=+d.sdur;finish({t:end-dur*6e4,end,dur});return}
   if(el.id==='wake'){keepNote();const ts=S.timers.sleep,end=getT();F.fromSleep=1;finish({t:ts.start,end,dur:Math.max(1,Math.round((end-ts.start)/6e4))});return}
   if(el.id==='sCancel'){if(!F.cancelArm){F.cancelArm=1;sleepStep();return}S.timers={...S.timers,sleep:null};saveTimers();closeSheet();toast('טיימר השינה בוטל');return}
+  if(d.wmode){F.w.mode=d.wmode;if(d.wmode==='direct')F.w.manual=false;weightStep();return}
+  if(el.id==='wOk'){const kg=pkg(F.w.baby),m=$('#wMsg');if(!kg||kg>40){if(m)m.textContent='צריך להזין את משקל '+BABY()+' בק״ג, למשל 3.850';$('#wBaby').focus();return}F.w.baby=kg3(kg);weightConfirm();return}
+  if(el.id==='wBack'){weightStep();return}
+  if(el.id==='wSave'){commit({kg:pkg(F.w.baby)});return}
+  if(el.id==='wCancel'){F.cancelAsk=1;weightStep();return}
+  if(el.id==='wCancelNo'){F.cancelAsk=0;weightStep();return}
+  if(el.id==='wCancelYes'){closeSheet();return}
   if(el.id==='txSave'){const v=$('#txIn').value.trim();if(!v){$('#txIn').focus();return}
     if(F.type==='q'){const q={id:uid(),text:v,t:Date.now(),done:false};if(F.d.photos&&F.d.photos.length)q.photos=F.d.photos;putQ(q);closeSheet();toast('השאלה נשמרה ללשונית "לרופאה"');return}
     if(F.type==='weight'){const kg=+v.replace(',','.');if(!kg)return;commit({kg});return}
@@ -1192,9 +1249,14 @@ function handleMisc(el){
   if(el.id==='shareCopy'){copyText($('#shareText').textContent);return}
   if(el.id==='shClose'){closeSheet();return}
 }
+/* manual time: applied while the wheel turns (input) and again when it closes (change) */
+function setAbs(el){const [H,M]=String(el.value).split(':').map(Number);if(isNaN(H))return;const d=new Date();d.setHours(H,M||0,0,0);if(d.getTime()>Date.now()+6e4)d.setDate(d.getDate()-1);
+  F.abs=d.getTime();const ab=$('#absBtn');if(ab){ab.classList.add('on');ab.textContent='🕒 '+hm(F.abs)}const w=el.closest('.when');if(w)w.querySelectorAll('[data-off]').forEach(b=>b.classList.remove('on'))}
+document.addEventListener('input',ev=>{const el=ev.target;if(el.id==='absTime'&&F)setAbs(el);if(el.dataset&&el.dataset.wf&&F)wInput(el)});
+document.addEventListener('click',ev=>{const el=ev.target;if(el.id==='absTime'){if(!el.value)el.value=hm(Date.now());try{el.showPicker()}catch(e){}}},true);
 document.addEventListener('change',ev=>{
   const el=ev.target;
-  if(el.id==='absTime'&&F){const [H,M]=el.value.split(':').map(Number);if(isNaN(H))return;const d=new Date();d.setHours(H,M,0,0);if(d.getTime()>Date.now()+6e4)d.setDate(d.getDate()-1);F.abs=d.getTime();const ab=$('#absBtn');if(ab){ab.classList.add('on');ab.textContent='🕒 '+hm(F.abs)}el.closest('.when').querySelectorAll('[data-off]').forEach(b=>b.classList.remove('on'));if(F.review){keepNote();renderReview()}return}
+  if(el.id==='absTime'&&F){setAbs(el);if(F.review){keepNote();renderReview()}return}
   if(el.dataset.qdone){const q=S.questions[el.dataset.qdone];if(q)putQ({...q,done:el.checked});return}
   if(el.id==='vFrom'){visitFrom=el.value||addDays(dayKey(Date.now()),-6);renderDoctor();return}
   if(el.id==='pName'){S.settings={...S.settings,name:el.value.trim()};saveSettings();return}
