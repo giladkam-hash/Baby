@@ -218,6 +218,12 @@ nav.tabs button.on{color:var(--accent)}
 .water .ic svg{width:20px;height:20px}
 .water .grow{flex:1;min-width:0}
 .water .note{font-size:12px;margin-top:3px}
+.ftab{width:100%;border-collapse:collapse;font-size:14px}
+.ftab th{font-weight:400;color:var(--muted);font-size:12px;text-align:start;padding:4px 4px;border-bottom:1px solid var(--line)}
+.ftab td{padding:7px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+.ftab tr.part td{padding-top:2px;color:var(--muted);font-size:13px;border-bottom-style:dashed}
+.ftab tr.grp td{border-bottom:0}
+.ftab tfoot td{border-bottom:0;padding-top:9px}
 .wbig{font-size:24px;font-family:var(--font-display);font-weight:600;text-align:center;direction:ltr}
 .wdiff{border-radius:14px;padding:12px 14px;margin:6px 0;background:var(--bg);font-size:16px}
 .wdiff.up{background:var(--c-q);color:var(--i-q)}
@@ -339,7 +345,7 @@ const round1=n=>Math.round(n*10)/10;
 
 /* ---------- state & storage ---------- */
 const MOM=()=>(S.settings.momName||'').trim()||'אמא';
-const DEF={momName:'',momExtra:[],name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{},water:{goal:0,ml:0,start:'07:00',end:'22:00'}};
+const DEF={mergeMin:40,momName:'',momExtra:[],name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{},water:{goal:0,ml:0,start:'07:00',end:'22:00'}};
 const S={days:{},questions:{},settings:{...DEF},timers:{feed:null,sleep:null},mode:'local'};
 const LS='babylog.v1';
 try{const raw=localStorage.getItem(LS);if(raw){const x=JSON.parse(raw);Object.assign(S,{days:x.days||{},questions:x.questions||{},settings:{...DEF,...(x.settings||{})},timers:x.timers||{feed:null,sleep:null}})}}catch(e){}
@@ -433,10 +439,20 @@ function eventsOn(k){const ev=(S.days[k]&&S.days[k].ev)||{};return Object.values
 function recent(days){const out=[];const t=dayKey(Date.now());for(let i=days-1;i>=0;i--)out.push(...eventsOn(addDays(t,-i)));return out}
 function lastOf(types){const ev=recent(4).filter(e=>types.includes(e.type));return ev[ev.length-1]||null}
 function nextSide(){const f=recent(4).filter(e=>e.type==='feed'&&e.side);const l=f[f.length-1];if(!l)return null;const s=l.lastSide||l.side;return s==='R'?'L':s==='L'?'R':null}
+/* breastfeeds that start within mergeMin minutes of the previous one's end are one feeding session */
+function feedSessions(list){
+  const gap=(+S.settings.mergeMin>=0?+S.settings.mergeMin:40)*6e4,out=[];
+  list.filter(e=>e.type==='feed').sort((a,b)=>a.t-b.t).forEach(e=>{
+    const end=feedEnd(e),last=out[out.length-1];
+    if(last&&gap&&e.t-last.end<=gap){last.items.push(e);last.end=Math.max(last.end,end);last.dur+=+e.dur||0}
+    else out.push({start:e.t,end,dur:+e.dur||0,items:[e]});
+  });
+  return out;
+}
 function stats(list){
   const s={water:0,feeds:0,feedMin:0,R:0,L:0,B:0,bottles:0,bottleMl:0,pumps:0,pumpMl:0,diapers:0,wet:0,dirty:0,sleeps:0,sleepMin:0,meds:[],weights:[],hard:0,notes:[],colorFlags:[],marked:[]};
   for(const e of list){
-    if(e.type==='feed'){s.feeds++;s.feedMin+=+e.dur||0;if(e.side)s[e.side]++;if(e.rating==='hard')s.hard++}
+    if(e.type==='feed'){s.feedEntries=(s.feedEntries||0)+1;s.feedMin+=+e.dur||0;if(e.side)s[e.side]++;if(e.rating==='hard')s.hard++}
     else if(e.type==='bottle'){s.bottles++;s.bottleMl+=+e.ml||0}
     else if(e.type==='pump'){s.pumps++;s.pumpMl+=+e.ml||0}
     else if(e.type==='diaper'){s.diapers++;if(e.kind!=='poo')s.wet++;if(e.kind!=='pee')s.dirty++;if(FLAG_COLORS.includes(e.color))s.colorFlags.push(e)}
@@ -447,13 +463,15 @@ function stats(list){
     if(e.note||(e.tags&&e.tags.length))s.notes.push(e);
     if(e.tags&&e.tags.includes('לסמן לרופאה'))s.marked.push(e);
   }
+  s.feeds=feedSessions(list).length;
   return s;
 }
 function flagsFor(k){
   const list=eventsOn(k),st=stats(list),out=[],set=S.settings,isToday=k===dayKey(Date.now());
-  const fe=list.filter(e=>e.type==='feed'||e.type==='bottle').map(e=>e.t);
-  if(isToday&&fe.length)fe.push(Date.now());
-  let worst=0,a=0,b=0;for(let i=1;i<fe.length;i++){const g=fe[i]-fe[i-1];if(g>worst){worst=g;a=fe[i-1];b=fe[i]}}
+  /* gaps are measured from the end of one feeding session to the start of the next */
+  const fe=[...feedSessions(list).map(g=>[g.start,g.end]),...list.filter(e=>e.type==='bottle').map(e=>[e.t,e.t])].sort((x,y)=>x[0]-y[0]);
+  if(isToday&&fe.length)fe.push([Date.now(),Date.now()]);
+  let worst=0,a=0,b=0;for(let i=1;i<fe.length;i++){const g=fe[i][0]-fe[i-1][1];if(g>worst){worst=g;a=fe[i-1][1];b=fe[i][0]}}
   if(set.gapH&&worst>set.gapH*3600e3)out.push('פער של '+durTxt(worst/60000)+' בין '+(feat('bottle')?'האכלות':'הנקות')+' ('+hm(a)+'–'+(b>=Date.now()-60000&&isToday?'עכשיו':hm(b))+')');
   const late=!isToday||new Date().getHours()>=20;
   if(set.minWet&&late&&list.length&&st.wet<set.minWet)out.push(st.wet+' חיתולים רטובים ביום (הסף שהגדרתם: '+set.minWet+')');
@@ -465,7 +483,7 @@ function flagsFor(k){
 const colorName=c=>(COLORS.find(x=>x[0]===c)||[0,c||''])[1];
 function desc(e){
   const p=[];
-  if(e.type==='feed'){if(e.side)p.push(SIDE[e.side]);if(e.dur)p.push(durTxt(e.dur));if(e.rating)p.push(RATING[e.rating])}
+  if(e.type==='feed'){if(e.side)p.push(SIDE[e.side]);if(e.dur)p.push(durTxt(e.dur)+(feedPause(e)?' בפועל':''));const pz=feedPause(e);if(pz)p.push('השהייה '+durTxt(pz));if(e.rating)p.push(RATING[e.rating])}
   if(e.type==='bottle'){if(e.milk)p.push(MILK[e.milk]);if(e.ml)p.push(e.ml+' מ״ל')}
   if(e.type==='pump'){if(e.side)p.push(SIDE[e.side]);if(e.ml)p.push(e.ml+' מ״ל')}
   if(e.type==='diaper'){p.push(KIND[e.kind]||'');if(e.color)p.push(colorName(e.color))}
@@ -483,6 +501,7 @@ function dayText(k){
   const st=stats(eventsOn(k)),name=S.settings.name||'התינוקת',L=[];
   L.push('סיכום יומי – '+name+' – '+dayLabel(k));
   L.push('הנקות: '+st.feeds+(st.feeds?' (ימין '+st.R+' · שמאל '+st.L+' · שניהם '+st.B+') · סה״כ '+durTxt(st.feedMin):''));
+  feedSessions(eventsOn(k)).forEach((g,i)=>L.push('  '+(i+1)+'. '+hm(g.start)+'–'+hm(g.end)+' · '+durTxt(g.dur)+(g.items.length>1?' (מפוצלת: '+g.items.map(e=>SIDE[e.side]||'').filter(Boolean).join(', ')+')':g.items[0].side?' · '+SIDE[g.items[0].side]:'')));
   if(feat('bottle')&&st.bottles)L.push('בקבוקים: '+st.bottles+' · '+st.bottleMl+' מ״ל');
   if(feat('pump')&&st.pumps)L.push('שאיבות: '+st.pumps+' · '+st.pumpMl+' מ״ל');
   L.push('חיתולים: '+st.diapers+' (רטובים '+st.wet+' · קקי '+st.dirty+')');
@@ -566,7 +585,7 @@ function renderHome(){
       return `<button class="act" type="button" data-wadd="1" aria-label="הוספת בקבוק מים"><span class="circle" style="background:${ws.goal?`conic-gradient(var(--i-bottle) ${pct}%, var(--c-bottle) 0)`:'var(--c-bottle)'};color:var(--i-bottle)"><span class="wfill">${IC.wbottle}</span></span><span class="lbl">מים ל${esc(MOM())}</span><span class="ago num">${ws.goal?ws.cnt+'/'+ws.goal+' בקבוקים':ws.cnt?ws.cnt+' היום':'+ בקבוק'}</span></button>`}
     if(k==='weight'){const lw=lastWeight();
       return `<button class="act" type="button" data-open="weight"><span class="circle" style="background:var(--c-weight);color:var(--i-weight)">${IC.weight}</span><span class="lbl">משקל</span><span class="ago num">${lw?kg3(lw.kg)+' ק״ג':''}</span></button>`}
-    const sub=k==='q'?(openQs()?openQs()+' פתוחות':''):live?'פעיל':e?ago(k==='sleep'?(e.end||e.t):e.t):'';
+    const sub=k==='q'?(openQs()?openQs()+' פתוחות':''):live?'פעיל':e?ago(k==='sleep'?(e.end||e.t):k==='feed'?feedEnd(e):e.t):'';
     return `<button class="act" type="button" data-open="${k}"><span class="circle${live?' live':''}" style="background:var(--c-${T[k].c});color:var(--i-${T[k].c})">${IC[k]}</span><span class="lbl">${k==='q'?'שאלה לרופאה':T[k].l}</span><span class="ago">${sub}</span></button>`}).join('')}</div>`;
   h+=`<div class="more"><button type="button" data-open="med">+ ויטמין / תרופה לתינוקת</button><button type="button" data-open="mmed">+ תרופה ל${esc(MOM())}</button><button type="button" data-open="note">+ הערה</button></div>`;
   const k=dayKey(now),st=stats(eventsOn(k));
@@ -576,6 +595,7 @@ function renderHome(){
   if(fl.length)h+=`<div class="flags"><h3>לתשומת לב</h3><ul>${fl.map(f=>`<li>${esc(f)}</li>`).join('')}</ul><small>סימון כללי לפי מה שנרשם והספים שבהגדרות. זו לא אבחנה. אם משהו מדאיג, פנו לצוות הרפואי.</small></div>`;
   $('#v-home').innerHTML=h;
 }
+const feedPause=e=>e.end&&e.dur?Math.max(0,Math.round((e.end-e.t)/6e4-e.dur)):0;
 const feedEnd=e=>e.end||(e.dur?e.t+e.dur*6e4:e.t);
 const agoS=t=>ago(t).replace('לפני ','');
 const openQs=()=>Object.values(S.questions).filter(q=>!q.done).length;
@@ -627,7 +647,7 @@ function painHTML(){
 /* reminders */
 function dueReminders(){
   const out=[],now=Date.now(),set=S.settings,k=dayKey(now);
-  if(set.feedEvery>0&&!S.timers.feed){const lf=lastOf(['feed','bottle']);if(lf&&now-lf.t>=set.feedEvery*3600e3&&now>(localOnly.snooze||0))out.push({id:'feed',txt:'עברו '+durTxt((now-lf.t)/60000)+' מה'+feedWord()+' האחרונה',act:'feed',actL:'תיעוד הנקה',snooze:true})}
+  if(set.feedEvery>0&&!S.timers.feed){const lf=lastOf(['feed','bottle']);if(lf&&now-feedEnd(lf)>=set.feedEvery*3600e3&&now>(localOnly.snooze||0))out.push({id:'feed',txt:'עברו '+durTxt((now-feedEnd(lf))/60000)+' מסיום ה'+feedWord()+' האחרונה',act:'feed',actL:'תיעוד הנקה',snooze:true})}
   (set.daily||[]).forEach(r=>{
     const [H,M]=(r.time||'09:00').split(':').map(Number);const due=new Date();due.setHours(H,M,0,0);
     const mom=r.who==='mom',given=eventsOn(k).some(e=>e.type===(mom?'mmed':'med')&&e.name===r.label);
@@ -653,10 +673,22 @@ function renderLog(){
   h+=`<div class="tiles"><div class="tile"><b class="num">${st.feeds+st.bottles}</b><span>${feat('bottle')?'האכלות':'הנקות'}</span></div><div class="tile"><b class="num">${st.wet}</b><span>רטובים</span></div><div class="tile"><b class="num">${st.dirty}</b><span>קקי</span></div><div class="tile"><b class="num">${durTxt(st.sleepMin).replace(' ש׳','').replace(' דק׳','′')}</b><span>שינה</span></div></div>`;
   h+=`<div class="card"><h2>ציר היום</h2>${timeline(list,k)}<div class="legend"><span><i style="background:var(--i-feed)"></i>הנקה</span>${feat('bottle')?'<span><i style="background:var(--i-bottle)"></i>בקבוק</span>':''}<span><i style="background:var(--i-diaper)"></i>חיתול</span><span><i style="background:var(--i-sleep)"></i>שינה</span></div></div>`;
   const fl=flagsFor(k);if(fl.length)h+=`<div class="flags" style="margin-bottom:12px"><h3>לתשומת לב</h3><ul>${fl.map(f=>`<li>${esc(f)}</li>`).join('')}</ul><small>סימון כללי בלבד, לא אבחנה.</small></div>`;
+  h+=feedTable(list);
   h+=`<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 style="margin:0">רישומים (${list.length})</h2><button class="btn small" type="button" data-share="${k}">שיתוף סיכום</button></div>`;
-  h+=list.length?`<ul class="list">${list.slice().reverse().map(e=>`<li><span class="ic" style="background:var(--c-${T[e.type].c});color:var(--i-${T[e.type].c})">${IC[e.type]}</span><span class="main"><b>${T[e.type].l}</b><div>${esc(desc(e))}${e.note?' · '+esc(e.note):''}</div>${e.photos&&e.photos.length?photoList(e.photos).replace('id="phList"',''):''}</span><span class="tm num">${hm(e.t)}</span><button class="edit" type="button" data-edit="${e.id}" data-k="${k}">עריכה</button></li>`).join('')}</ul>`:`<div class="empty">אין רישומים ביום הזה</div>`;
+  h+=list.length?`<ul class="list">${list.slice().reverse().map(e=>`<li><span class="ic" style="background:var(--c-${T[e.type].c});color:var(--i-${T[e.type].c})">${IC[e.type]}</span><span class="main"><b>${T[e.type].l}</b><div>${esc(desc(e))}${e.note?' · '+esc(e.note):''}</div>${e.photos&&e.photos.length?photoList(e.photos).replace('id="phList"',''):''}</span><span class="tm num">${e.type==='feed'&&feedEnd(e)-e.t>=6e4?hm(e.t)+'–'+hm(feedEnd(e)):e.type==='sleep'&&e.end?hm(e.t)+'–'+hm(e.end):hm(e.t)}</span><button class="edit" type="button" data-edit="${e.id}" data-k="${k}">עריכה</button></li>`).join('')}</ul>`:`<div class="empty">אין רישומים ביום הזה</div>`;
   h+=`</div>`;
   $('#v-log').innerHTML=h;
+}
+function feedTable(list){
+  const ss=feedSessions(list);if(!ss.length)return '';
+  const tot=ss.reduce((a,g)=>a+g.dur,0);
+  const rows=ss.map((g,i)=>{const multi=g.items.length>1;
+    const main=`<tr class="${multi?'grp':''}"><td class="num">${i+1}</td><td class="num">${hm(g.start)}</td><td class="num">${hm(g.end)}</td><td>${multi?'מפוצלת':esc(SIDE[g.items[0].side]||'')}</td><td class="num"><b>${durTxt(g.dur)}</b></td></tr>`;
+    const sub=multi?g.items.map(e=>`<tr class="part"><td></td><td class="num">${hm(e.t)}</td><td class="num">${hm(feedEnd(e))}</td><td>${esc(SIDE[e.side]||'')}</td><td class="num">${durTxt(e.dur)}${feedPause(e)?` <span class="note">(+השהייה ${durTxt(feedPause(e))})</span>`:''}</td></tr>`).join(''):(feedPause(g.items[0])?`<tr class="part"><td></td><td colspan="4" class="note">כולל השהייה של ${durTxt(feedPause(g.items[0]))} שלא נספרה</td></tr>`:'');
+    return main+sub}).join('');
+  return `<div class="card"><h2>הנקות היום</h2><table class="ftab"><thead><tr><th>#</th><th>התחלה</th><th>סיום</th><th>צד</th><th>זמן הנקה</th></tr></thead><tbody>${rows}</tbody>
+   <tfoot><tr><td colspan="4">סה״כ ${ss.length} הנקות</td><td class="num"><b>${durTxt(tot)}</b></td></tr></tfoot></table>
+   <p class="note" style="margin:6px 0 0">זמן ההנקה בלי ההשהיות. הנקות שמתחילות עד ${+S.settings.mergeMin>=0?+S.settings.mergeMin:40} דק׳ אחרי סיום הקודמת נספרות כהנקה אחת.</p></div>`;
 }
 function timeline(list,k){
   const W=1000,start=keyToDate(k).getTime(),x=t=>Math.max(0,Math.min(W,(t-start)/864e5*W));
@@ -782,6 +814,7 @@ function renderPrefs(){
    <div class="row" style="justify-content:space-between;margin-top:14px"><span>מסך דלוק בזמן טיימר הנקה</span><div class="seg"><button type="button" data-awake="1" class="${s.keepAwake!==false?'on':''}">פעיל</button><button type="button" data-awake="0" class="${s.keepAwake===false?'on':''}">כבוי</button></div></div></div>`;
   h+=`<div class="card"><h2>ספים לסימונים</h2><p class="note" style="margin-top:0">היומן רק מסמן כשמה שנרשם חוצה ספים שאתם קובעים. כדאי להתאים אותם לפי הנחיית הצוות הרפואי. 0 מכבה.</p>
    <label class="f" for="pGap">פער בין ${feat('bottle')?'האכלות':'הנקות'} (שעות)</label><input class="in" type="number" inputmode="decimal" step="0.5" min="0" id="pGap" value="${s.gapH}">
+   <label class="f" for="pMerge">הנקה שמתחילה עד כמה דקות אחרי הקודמת נספרת כאותה הנקה</label><input class="in" type="number" inputmode="numeric" min="0" id="pMerge" value="${+s.mergeMin>=0?+s.mergeMin:40}">
    <label class="f" for="pWet">מינימום חיתולים רטובים ביום</label><input class="in" type="number" inputmode="numeric" min="0" id="pWet" value="${s.minWet}"></div>`;
   const w=wSet();
   h+=`<div class="card"><h2>מעקב מים ל${esc(MOM())}</h2><p class="note" style="margin-top:0">כמה בקבוקים לסיים ביום. אם לפי השעה הקצב מאחור, יופיע תזכורת כשהיומן פתוח. 0 = כבוי.</p>
@@ -1263,6 +1296,7 @@ document.addEventListener('change',ev=>{
   if(el.id==='pMom'){S.settings={...S.settings,momName:el.value.trim()};saveSettings();return}
   if(el.id==='pBirth'){S.settings={...S.settings,birth:el.value};saveSettings();return}
   if(el.id==='pGap'){S.settings={...S.settings,gapH:+el.value||0};saveSettings();return}
+  if(el.id==='pMerge'){S.settings={...S.settings,mergeMin:Math.max(0,+el.value||0)};saveSettings();return}
   if(el.id==='pWet'){S.settings={...S.settings,minWet:+el.value||0};saveSettings();return}
   if(el.dataset.water){const k=el.dataset.water,v=k==='start'||k==='end'?el.value:Math.max(0,+el.value||0);if((k==='start'||k==='end')&&!v)return;S.settings={...S.settings,water:{...wSet(),[k]:v}};saveSettings();return}
   if(el.dataset.mrem){const n=el.dataset.mrem,t=el.value,rest=(S.settings.daily||[]).filter(x=>!(x.who==='mom'&&x.label===n));
