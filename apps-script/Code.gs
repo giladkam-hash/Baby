@@ -139,7 +139,7 @@ function rebuildClean() { rebuildClean_(sheet_()); }
  * (approve the permissions), then Deploy ← Manage deployments ← edit ← New version.
  * A trigger then runs notifyTick every minute. It reads only a small saved summary, not the sheet. */
 var NTFY = 'https://ntfy.sh/';
-var NVER = '4';
+var NVER = '5';
 var DIAG_TAB = 'מצב התראות';
 var nlog_ = []; // bump when the saved summary needs new fields; the next tick rebuilds it from the sheet
 
@@ -209,7 +209,10 @@ function send_(topic, title, message, prio, tags, btns, click) {
   if (url && btns && btns.length) msg.actions = btns.map(function (b) {
     return { action: 'http', label: b[0], url: url, method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(b[1]), clear: true }; });
   var code = 0, body = '';
-  try { var res = UrlFetchApp.fetch(NTFY, { method: 'post', contentType: 'application/json', muteHttpExceptions: true, payload: JSON.stringify(msg) });
+  // Google's servers share IP addresses, and ntfy.sh limits anonymous senders per IP. A free ntfy.sh access token,
+  // saved as the script property NTFY_TOKEN (Project Settings ← Script Properties), gives this script its own quota.
+  var tok = PropertiesService.getScriptProperties().getProperty('NTFY_TOKEN'), hdr = tok ? { Authorization: 'Bearer ' + String(tok).trim() } : {};
+  try { var res = UrlFetchApp.fetch(NTFY, { method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: hdr, payload: JSON.stringify(msg) });
     code = res.getResponseCode(); body = code === 200 ? '' : String(res.getContentText()).slice(0, 160); } catch (e) { body = String(e).slice(0, 160); }
   nlog_.push(title + ' → ' + code + (body ? ' ' + body : ''));
 }
@@ -257,7 +260,7 @@ function diag_(err) {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(DIAG_TAB) || ss.insertSheet(DIAG_TAB);
   var log = (nget_('nlog', []) || []).concat(nlog_.map(function (l) { return Utilities.formatDate(now, tz, 'dd.MM HH:mm') + '  ' + l; })).slice(-15);
   nput_('nlog', log);
-  var rows = [['בדיקה אחרונה', Utilities.formatDate(now, tz, 'dd.MM HH:mm:ss')], ['גרסת קוד', NVER], ['ערוץ מוגדר', set.topic ? 'כן' : 'לא'],
+  var rows = [['בדיקה אחרונה', Utilities.formatDate(now, tz, 'dd.MM HH:mm:ss')], ['גרסת קוד', NVER], ['ערוץ מוגדר', set.topic ? 'כן' : 'לא'], ['טוקן ntfy', PropertiesService.getScriptProperties().getProperty('NTFY_TOKEN') ? 'מוגדר' : 'חסר'],
     ['הנקה אחרונה הסתיימה', f ? t(f.e) : '—'], ['צד אחרון', f && f.s ? f.s : '—'], ['הנקה הבאה', f && set.every ? t(f.e + set.every * 36e5) : '—'],
     ['טיימר הנקה פעיל', tim.feed ? 'כן' : 'לא'], ['התראה לפני (דק׳)', (set.leads || []).join(', ') || '—'], ['שורות שנקראו', PropertiesService.getScriptProperties().getProperty('nrow') || '0'],
     ['שגיאה', err || '—'], ['', ''], ['התראות אחרונות (קוד 200 = התקבלה ב-ntfy)', '']].concat(log.slice().reverse().map(function (l) { return [l, '']; }));
@@ -284,7 +287,7 @@ function tick_() {
     var lastBreast = feeds.filter(function (e) { return e.y === 'feed' && e.s; })[0];
     var nextSide = lastBreast ? ({ R: 'שמאל', L: 'ימין' })[lastBreast.s] || '' : '';
     if (set.end && (due ? now < due - 2 * 6e4 : now - end < 3 * 36e5)) once('e' + NVER + ':' + end, function () {
-      send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), [due ? 'הבאה ב-' + hm(due) : '', nextSide ? 'צד הבא: ' + nextSide : ''].filter(String).join(' · ') || 'נרשם ביומן', 3, ['baby_bottle'], null, app); });
+      send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), [due ? 'הבאה ב-' + hm(due) : '', nextSide ? 'צד הבא: ' + nextSide : ''].filter(String).join(' · ') || 'נרשם ביומן', 4, ['baby_bottle'], null, app); });
     // several "minutes before" alerts; if more than one is already due (e.g. phone was offline), send only the closest one
     var hitL = (set.leads || []).filter(function (l) { return now >= due - l * 6e4; }).sort(function (a, b) { return a - b; });
     if (due && hitL.length && now < due) {
@@ -300,7 +303,7 @@ function tick_() {
   if (set.meds) (set.daily || []).forEach(function (r) {
     var tm = mins_(r.t), key = 'r' + r.id + day; if (nowM < tm || (nowM > tm + 180 && !snz[key])) return;
     var given = today.some(function (e) { return e.y === (r.m ? 'mmed' : 'med') && e.n === r.l; });
-    if (!given) once(key, function () { send_(set.topic, '💊 ' + r.l + (r.m ? ' לאמא' : ' לתינוקת'), 'תזכורת יומית · ' + r.t, 3, ['pill'],
+    if (!given) once(key, function () { send_(set.topic, '💊 ' + r.l + (r.m ? ' לאמא' : ' לתינוקת'), 'תזכורת יומית · ' + r.t, 4, ['pill'],
       [[r.m ? 'נלקח ✓' : 'ניתן ✓', { action: 'done', kind: r.m ? 'mmed' : 'med', name: r.l }], ['עוד 30 דק׳', { action: 'snooze', key: key, min: 30 }]], app); });
   });
   // mother's painkiller: when the next dose is allowed (only if chosen and an interval was set)
@@ -308,7 +311,7 @@ function tick_() {
     var g = +set.gap[n] || 0; if (!g) return;
     var last = list.filter(function (e) { return e.y === 'mmed' && e.n === n; }).sort(function (a, b) { return b.t - a.t; })[0];
     if (!last) return; var ready = last.t + g * 36e5;
-    if (now >= ready && now < ready + 3 * 36e5) once('k' + last.t, function () { send_(set.topic, 'אפשר לקחת שוב ' + n, 'המנה הקודמת נלקחה ב-' + hm(last.t), 3, ['pill'], null, app); });
+    if (now >= ready && now < ready + 3 * 36e5) once('k' + last.t, function () { send_(set.topic, 'אפשר לקחת שוב ' + n, 'המנה הקודמת נלקחה ב-' + hm(last.t), 4, ['pill'], null, app); });
   });
   // water: behind the pace by at least one bottle (same rule as in the app)
   var w = set.w || {}, goal = +w.goal || 0;
@@ -316,7 +319,7 @@ function tick_() {
     var a = mins_(w.start || '07:00'), b = mins_(w.end || '22:00'); if (b <= a) b = a + 16 * 60;
     if (nowM >= a + 60 && nowM <= b) {
       var exp = Math.floor(goal * (nowM - a) / (b - a) + 1e-9), cnt = today.filter(function (e) { return e.y === 'water'; }).reduce(function (s, e) { return s + (e.c || 1); }, 0);
-      if (exp - cnt >= 1) once('w' + day + ':' + exp, function () { send_(set.topic, '💧 הגיע הזמן לבקבוק מים', 'שתית ' + cnt + ' מתוך ' + goal + '. לפי השעה כדאי להיות ב-' + exp + '.', 3, ['droplet'],
+      if (exp - cnt >= 1) once('w' + day + ':' + exp, function () { send_(set.topic, '💧 הגיע הזמן לבקבוק מים', 'שתית ' + cnt + ' מתוך ' + goal + '. לפי השעה כדאי להיות ב-' + exp + '.', 4, ['droplet'],
         [['+ בקבוק', { action: 'done', kind: 'water' }], ['עוד שעה', { action: 'snooze', key: 'w' + day, min: 60 }]], app); });
     }
   }

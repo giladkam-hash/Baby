@@ -880,7 +880,8 @@ function renderPrefs(){
     <li>ב-ntfy לוחצים +, מדביקים את שם הערוץ שלמעלה ולוחצים Subscribe.</li>
     <li>כאן לוחצים "שליחת התראת בדיקה". אם ההתראה הגיעה, הטלפון מחובר.</li>
     <li>פעם אחת, מהמחשב, בגיליון: Extensions ← Apps Script, מוחקים את הקוד הישן ומדביקים את החדש <button class="btn small" type="button" id="syCode">העתקת הקוד</button> ושומרים. בוחרים למעלה <b>setupNotifications</b>, לוחצים Run ומאשרים. אחר כך Deploy ← Manage deployments ← ✏️ ← New version ← Deploy.</li>
-    <li>לוחצים "בדיקת השרת". כשכתוב שהשרת פעיל, ההתראות יגיעו גם כשהטלפון נעול והיומן סגור.</li></ol>
+    <li>לוחצים "בדיקת השרת". כשכתוב שהשרת פעיל, ההתראות יגיעו גם כשהטלפון נעול והיומן סגור.</li>
+    <li>חובה, פעם אחת: השרתים של גוגל משותפים להרבה משתמשים, ו-ntfy חוסם אותם כשעוברים מכסה יומית. לכן פותחים חשבון חינמי ב-ntfy.sh, יוצרים Access token, ובגיליון: Apps Script ← ⚙️ Project Settings ← Script Properties ← Add script property, בשם <b dir="ltr">NTFY_TOKEN</b> ובערך הטוקן ← Save. את הטוקן לא שולחים לאף אחד.</li></ol>
     <p class="note">מי שיודע את שם הערוץ יכול לקרוא את ההתראות, לכן הוא אקראי וארוך ואין בהתראות שמות.</p></details>
    <button class="btn small" type="button" id="ntfyOff" style="margin-top:8px">כיבוי</button>`
    :`<p class="note" style="margin-top:0">היומן לבד יכול להתריע רק כשהוא פתוח או ממש לפני רגע. כדי לקבל התראות גם כשהוא סגור והטלפון נעול, מחברים את האפליקציה החינמית ntfy דרך הגיליון שכבר מחובר.</p>
