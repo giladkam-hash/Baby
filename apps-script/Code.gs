@@ -241,8 +241,9 @@ function notifyTick() {
   var feeds = list.filter(function (e) { return e.y === 'feed' || e.y === 'bottle'; }).sort(function (a, b) { return b.e - a.e; });
   if (feeds.length && !tim.feed) {
     var end = feeds[0].e, due = set.every ? end + set.every * 36e5 : 0;
-    if (set.end && now - end < 20 * 6e4) once('e' + end, function () {
-      send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), due ? 'ההנקה הבאה ב-' + hm(due) + ' (בעוד ' + set.every + ' ש׳)' : 'נרשם ביומן', 2, ['baby_bottle'], null, app); });
+    // sent once per feed, any time before the next one is due (not only right after it ended), at normal priority so it shows on the lock screen
+    if (set.end && (due ? now < due - 2 * 6e4 : now - end < 3 * 36e5)) once('e' + end, function () {
+      send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), due ? 'ההנקה הבאה ב-' + hm(due) + ' (בעוד ' + Math.max(1, Math.round((due - now) / 6e4)) + ' דק׳)' : 'נרשם ביומן', 3, ['baby_bottle'], null, app); });
     // several "minutes before" alerts; if more than one is already due (e.g. phone was offline), send only the closest one
     var hitL = (set.leads || []).filter(function (l) { return now >= due - l * 6e4; }).sort(function (a, b) { return a - b; });
     if (due && hitL.length && now < due) {
