@@ -324,7 +324,7 @@ const FLAG_COLORS=['pale','red'];
 const FEED_TAGS=['נרדמה תוך כדי','פלטה','היצמדות קשה','כאב','רעבה מאוד','לסמן לרופאה'];
 const GEN_TAGS=['לסמן לרופאה'];
 /* mother's medication: preset names and dose choices (unit shown next to the number) */
-const MOM_MEDS=[['איבופן',{u:'מ״ג',d:[200,300,400],pain:1}],['אקמול',{u:'מ״ג',d:[500,750,1000],pain:1}],['אופטלגין נוזלי',{u:'מ״ל',d:[10,20,30,40,50,60,70],pain:1}],['מולטי ויטמין',null],['סירופ אבליק',null]];
+const MOM_MEDS=[['איבופן',{u:'מ״ג',d:[200,300,400],pain:1}],['אקמול',{u:'מ״ג',d:[500,750,1000],pain:1}],['אופטלגין נוזלי',{u:'מ״ל',d:[10,20,30,40,50,60,70],pain:1}],['מולטי ויטמין',null],['ויטמין D',null],['סירופ אבליק',null]];
 const momNames=()=>[...MOM_MEDS.map(m=>m[0]),...(S.settings.momExtra||[]).filter(n=>!MOM_MEDS.some(m=>m[0]===n))];
 const momDose=n=>(MOM_MEDS.find(m=>m[0]===n)||[0,null])[1];
 const PAIN=MOM_MEDS.filter(m=>m[1]&&m[1].pain).map(m=>m[0]);
@@ -352,7 +352,7 @@ const round1=n=>Math.round(n*10)/10;
 
 /* ---------- state & storage ---------- */
 const MOM=()=>(S.settings.momName||'').trim()||'אמא';
-const DEF={mergeMin:40,momName:'',momExtra:[],name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{},water:{goal:0,ml:0,start:'07:00',end:'22:00'}};
+const DEF={notifyLead:10,notifyEnd:true,notifyWater:true,notifyMeds:true,ntfy:'',tz:'',mergeMin:40,momName:'',momExtra:[],name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{},water:{goal:0,ml:0,start:'07:00',end:'22:00'}};
 const S={days:{},questions:{},settings:{...DEF},timers:{feed:null,sleep:null},mode:'local'};
 const LS='babylog.v1';
 try{const raw=localStorage.getItem(LS);if(raw){const x=JSON.parse(raw);Object.assign(S,{days:x.days||{},questions:x.questions||{},settings:{...DEF,...(x.settings||{})},timers:x.timers||{feed:null,sleep:null}})}}catch(e){}
@@ -677,6 +677,17 @@ function remindersHTML(){
   if(cfg.url&&sync.status==='err'&&navigator.onLine!==false)b+=`<div class="banner"><span class="grow">הסנכרון לגוגל שיטס לא הושלם</span><button type="button" data-goto="prefs">לפרטים</button></div>`;
   else if(!cfg.url&&recent(30).length>=5&&localOnly.dismiss.backup!==k)b+=`<div class="banner"><span class="grow">כדאי לחבר גיבוי לגוגל שיטס כדי שהמידע לא יאבד</span><button type="button" data-goto="prefs">חיבור</button><button type="button" id="bkLater">לא היום</button></div>`;
   return b+dueReminders().filter(r=>r.id!=='feed').map(r=>`<div class="banner"><span class="grow">${esc(r.txt)}</span>${r.act?`<button type="button" data-open="${r.act}">${r.actL}</button>`:`<button type="button" ${r.mom?'data-momtake':'data-givemed'}="${esc(r.med)}">${r.actL}</button>`}${r.snooze?`<button type="button" data-snooze="1">עוד 15 דק׳</button>`:`<button type="button" data-dismiss="${r.id}">לא היום</button>`}</div>`).join('')}
+let preSeen='';
+function feedPreAlert(){
+  const lead=+S.settings.notifyLead||0,every=+S.settings.feedEvery||0;if(!lead||!every||S.timers.feed)return;
+  const lf=lastOf(['feed','bottle']);if(!lf)return;const due=feedEnd(lf)+every*36e5,now=Date.now();
+  if(now<due-lead*6e4||now>=due||preSeen===String(due))return;preSeen=String(due);
+  const txt=feedWord()+' בעוד '+Math.max(1,Math.round((due-now)/6e4))+' דק׳ (ב-'+hm(due)+')';
+  if(!document.hidden)toast('🍼 '+txt);
+  try{if('Notification' in window&&Notification.permission==='granted')new Notification('יומן התינוקת',{body:txt})}catch(e){}
+}
+setInterval(feedPreAlert,30000);
+setTimeout(()=>{try{const z=Intl.DateTimeFormat().resolvedOptions().timeZone;if(S.settings.ntfy&&z&&S.settings.tz!==z){S.settings={...S.settings,tz:z};saveSettings()}}catch(e){}},3000);setTimeout(feedPreAlert,5000);
 let notified={};
 function notifyCheck(){
   try{if(!('Notification' in window)||Notification.permission!=='granted')return;
@@ -813,6 +824,7 @@ const qItem=q=>`<div class="qitem${q.done?' done':''}"><input type="checkbox" id
 const waLink=t=>'https://wa.me/?text='+encodeURIComponent(t);
 
 /* ---------- prefs ---------- */
+const onOff=k=>`<div class="seg"><button type="button" data-ntog="${k}" data-v="1" class="${S.settings[k]!==false?'on':''}">פעיל</button><button type="button" data-ntog="${k}" data-v="0" class="${S.settings[k]===false?'on':''}">כבוי</button></div>`;
 function renderPrefs(){
   const s=S.settings;
   let h=`<div class="card"><h2>התינוקת</h2>
@@ -829,6 +841,27 @@ function renderPrefs(){
    <p class="note">התזכורות מופיעות כשהיומן פתוח. התראה לטלפון כשהוא סגור לא תמיד עובדת מתוך דף כזה, לכן לתזכורות קבועות כדאי להגדיר גם תזכורת בטלפון.</p>
    <button class="btn small" type="button" id="pNotif">לנסות לאפשר התראות</button>
    <div class="row" style="justify-content:space-between;margin-top:14px"><span>מסך דלוק בזמן טיימר הנקה</span><div class="seg"><button type="button" data-awake="1" class="${s.keepAwake!==false?'on':''}">פעיל</button><button type="button" data-awake="0" class="${s.keepAwake===false?'on':''}">כבוי</button></div></div></div>`;
+  const nl=+s.notifyLead||0;
+  h+=`<div class="card" id="ntfyCard"><h2>התראות לטלפון, גם כשהוא נעול</h2>
+   <label class="f">התראה לפני ההנקה הבאה</label><div class="seg">${[0,5,10,15,20].map(v=>`<button type="button" data-lead="${v}" class="${nl===v?'on':''}">${v?v+' דק׳':'כבוי'}</button>`).join('')}</div>
+   <p class="note">לפי "תזכורת הנקה אחרי" שלמעלה, מסיום ההנקה האחרונה.</p>
+   ${s.ntfy?`<div class="row" style="justify-content:space-between;padding:6px 0"><span>התראה כשהנקה מסתיימת (עם שעת ההנקה הבאה)</span>${onOff('notifyEnd')}</div>
+   <div class="row" style="justify-content:space-between;padding:6px 0"><span>תזכורות מים</span>${onOff('notifyWater')}</div>
+   <div class="row" style="justify-content:space-between;padding:6px 0"><span>תזכורות ויטמינים ותרופות</span>${onOff('notifyMeds')}</div>
+   <label class="f">שם הערוץ (מדביקים אותו באפליקציית ntfy)</label>
+   <div class="row" style="flex-wrap:nowrap"><input class="in" readonly dir="ltr" value="${esc(s.ntfy)}" id="ntfyTopic"><button class="btn" type="button" id="ntfyCopy">העתקה</button></div>
+   <div class="row" style="margin-top:10px"><button class="btn pri" type="button" id="ntfyTest">שליחת התראת בדיקה</button><button class="btn" type="button" id="ntfyStatus">בדיקת השרת</button></div>
+   <div class="note" id="ntfyMsg" style="margin-top:6px"></div>
+   <details style="margin-top:8px"><summary class="note">איך מחברים (פעם אחת)</summary><ol class="note" style="padding-inline-start:18px;display:grid;gap:4px;margin:8px 0">
+    <li>בכל טלפון: מתקינים את האפליקציה החינמית <b>ntfy</b> (App Store / Google Play) ומאשרים לה התראות.</li>
+    <li>ב-ntfy לוחצים +, מדביקים את שם הערוץ שלמעלה ולוחצים Subscribe.</li>
+    <li>כאן לוחצים "שליחת התראת בדיקה". אם ההתראה הגיעה, הטלפון מחובר.</li>
+    <li>פעם אחת, מהמחשב, בגיליון: מעדכנים את הקוד (Extensions ← Apps Script, מדביקים את הקוד מ"העתקת הקוד"), בוחרים למעלה את <b>setupNotifications</b> ולוחצים Run ומאשרים, ואז Deploy ← Manage deployments ← ✏️ ← New version ← Deploy.</li>
+    <li>לוחצים "בדיקת השרת". כשכתוב שהשרת פעיל, ההתראות יגיעו גם כשהטלפון נעול והיומן סגור.</li></ol>
+    <p class="note">מי שיודע את שם הערוץ יכול לקרוא את ההתראות, לכן הוא אקראי וארוך ואין בהתראות שמות.</p></details>
+   <button class="btn small" type="button" id="ntfyOff" style="margin-top:8px">כיבוי התראות לטלפון נעול</button>`
+   :`<p class="note">כדי לקבל התראות גם כשהיומן סגור והטלפון נעול: הנקה קרובה, סיום הנקה, מים וויטמינים. עובד דרך האפליקציה החינמית ntfy והגיליון שכבר מחובר.</p>
+   ${cfg.url?`<button class="btn pri" type="button" id="ntfyOn">הפעלה</button>`:`<p class="note">צריך קודם לחבר גיבוי לגוגל שיטס (למטה).</p>`}`}</div>`;
   h+=`<div class="card"><h2>ספים לסימונים</h2><p class="note" style="margin-top:0">היומן רק מסמן כשמה שנרשם חוצה ספים שאתם קובעים. כדאי להתאים אותם לפי הנחיית הצוות הרפואי. 0 מכבה.</p>
    <label class="f" for="pGap">פער בין ${feat('bottle')?'האכלות':'הנקות'} (שעות)</label><input class="in" type="number" inputmode="decimal" step="0.5" min="0" id="pGap" value="${s.gapH}">
    <label class="f" for="pMerge">הנקה שמתחילה עד כמה דקות אחרי הקודמת נספרת כאותה הנקה</label><input class="in" type="number" inputmode="numeric" min="0" id="pMerge" value="${+s.mergeMin>=0?+s.mergeMin:40}">
@@ -1228,6 +1261,15 @@ document.addEventListener('click',ev=>{
     toast('💧 נרשם בקבוק ('+ws.cnt+(ws.goal?'/'+ws.goal:'')+')'+(ws.goal&&ws.cnt===ws.goal?' · הגעת ליעד!':''),'ביטול',()=>removeEvent(e));return}
   if(d.wdel){const l=eventsOn(dayKey(Date.now())).filter(e=>e.type==='water').pop();if(l){removeEvent(l);toast('הוסר בקבוק אחד','ביטול',()=>putEvent({...l,del:false}))}return}
   if(d.wsnooze){localOnly.wSnooze=Date.now()+36e5;persistUI();renderAll();return}
+  if(d.lead!==undefined){S.settings={...S.settings,notifyLead:+d.lead};saveSettings();renderPrefs();return}
+  if(d.ntog){S.settings={...S.settings,[d.ntog]:d.v==='1'};saveSettings();renderPrefs();return}
+  if(el.id==='ntfyOn'){const r=Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>b.toString(36).padStart(2,'0')).join('').slice(0,20);S.settings={...S.settings,ntfy:'babylog-'+r,tz:Intl.DateTimeFormat().resolvedOptions().timeZone};saveSettings();renderPrefs();return}
+  if(el.id==='ntfyOff'){S.settings={...S.settings,ntfy:''};saveSettings();renderPrefs();return}
+  if(el.id==='ntfyCopy'){copyText(S.settings.ntfy);return}
+  if(el.id==='ntfyTest'){const m=$('#ntfyMsg');m.textContent='שולח…';fetch('https://ntfy.sh/',{method:'POST',body:JSON.stringify({topic:S.settings.ntfy,title:'בדיקה מיומן התינוקת',message:'אם רואים את זה, ההתראות מגיעות לטלפון 👍',tags:['baby_bottle'],priority:4})}).then(r=>{m.textContent=r.ok?'נשלחה. אם לא הגיעה תוך דקה, בדקו שנרשמתם לערוץ ב-ntfy ושההתראות שלה מאושרות.':'השליחה נכשלה ('+r.status+')'}).catch(()=>{m.textContent='השליחה נכשלה. בדקו חיבור לאינטרנט.'});return}
+  if(el.id==='ntfyStatus'){const m=$('#ntfyMsg');m.textContent='בודק…';api('GET',{action:'nstatus'}).then(x=>{const ago=x.last?Math.round((Date.now()-x.last)/6e4):null;
+    m.textContent=x.trigger!==false&&ago!=null&&ago<=3?'השרת פעיל ✓ (בדק לפני '+ago+' דק׳). ההתראות יגיעו גם כשהיומן סגור.':'הקוד בגיליון מעודכן, אבל ההתראות עוד לא הופעלו: צריך לבחור setupNotifications וללחוץ Run (שלב 4).'})
+    .catch(()=>{m.textContent='הגיליון לא מכיר את הבדיקה הזו: צריך לעדכן את הקוד בגיליון ולפרסם גרסה חדשה (שלב 4).'});return}
   if(d.awake){S.settings={...S.settings,keepAwake:d.awake==='1'};saveSettings();renderPrefs();return}
   if(d.feat){S.settings={...S.settings,features:{...(S.settings.features||{}),[d.feat]:d.on==='1'}};saveSettings();renderPrefs();return}
   /* sheet-scoped */
