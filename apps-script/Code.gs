@@ -139,7 +139,9 @@ function rebuildClean() { rebuildClean_(sheet_()); }
  * (approve the permissions), then Deploy ← Manage deployments ← edit ← New version.
  * A trigger then runs notifyTick every minute. It reads only a small saved summary, not the sheet. */
 var NTFY = 'https://ntfy.sh/';
-var NVER = '3'; // bump when the saved summary needs new fields; the next tick rebuilds it from the sheet
+var NVER = '4';
+var DIAG_TAB = 'מצב התראות';
+var nlog_ = []; // bump when the saved summary needs new fields; the next tick rebuilds it from the sheet
 
 function setupNotifications() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'notifyTick') ScriptApp.deleteTrigger(t); });
@@ -187,6 +189,16 @@ function rebuildNotifyState_() {
   var from = Math.max(2, n - 1500 + 2);
   var vals = sh.getRange(from, HEAD.length, sh.getLastRow() - from + 1, 1).getValues();
   ingest_(vals.map(function (r) { return String(r[0] || ''); }));
+  PropertiesService.getScriptProperties().setProperty('nrow', String(sh.getLastRow()));
+}
+/* reads rows added since the last tick, so notifications don't depend on which web-app version is deployed */
+function catchUp_() {
+  var P = PropertiesService.getScriptProperties(), sh = sheet_(), lr = sh.getLastRow(), done = +(P.getProperty('nrow') || 0);
+  if (lr <= done) return 0;
+  var from = Math.max(2, done + 1), vals = sh.getRange(from, HEAD.length, lr - from + 1, 1).getValues();
+  ingest_(vals.map(function (r) { return String(r[0] || ''); }));
+  P.setProperty('nrow', String(lr));
+  return lr - from + 1;
 }
 /* btns: [[label, {action:'snooze'|'done', ...}], ...] become buttons on the notification that call this script */
 function send_(topic, title, message, prio, tags, btns, click) {
@@ -196,7 +208,10 @@ function send_(topic, title, message, prio, tags, btns, click) {
   if (click) msg.click = click;
   if (url && btns && btns.length) msg.actions = btns.map(function (b) {
     return { action: 'http', label: b[0], url: url, method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(b[1]), clear: true }; });
-  UrlFetchApp.fetch(NTFY, { method: 'post', contentType: 'application/json', muteHttpExceptions: true, payload: JSON.stringify(msg) });
+  var code = 0, body = '';
+  try { var res = UrlFetchApp.fetch(NTFY, { method: 'post', contentType: 'application/json', muteHttpExceptions: true, payload: JSON.stringify(msg) });
+    code = res.getResponseCode(); body = code === 200 ? '' : String(res.getContentText()).slice(0, 160); } catch (e) { body = String(e).slice(0, 160); }
+  nlog_.push(title + ' → ' + code + (body ? ' ' + body : ''));
 }
 /* "snooze": forget that a reminder was sent, and stay quiet for N minutes; "done": log it in the sheet like the app does */
 function nAction_(b) {
@@ -227,7 +242,29 @@ function mins_(hhmm) { var a = String(hhmm || '00:00').split(':'); return (+a[0]
 function notifyTick() {
   var P = PropertiesService.getScriptProperties();
   P.setProperty('nlast', String(Date.now()));
-  if (P.getProperty('nver') !== NVER) { rebuildNotifyState_(); P.setProperty('nver', NVER); }
+  nlog_ = [];
+  var err = '';
+  try {
+    if (P.getProperty('nver') !== NVER) { rebuildNotifyState_(); P.setProperty('nver', NVER); } else catchUp_();
+    tick_();
+  } catch (e) { err = String(e && e.stack || e).slice(0, 300); }
+  try { diag_(err); } catch (e) {}
+}
+function diag_(err) {
+  var set = nget_('nset', {}) || {}, ev = nget_('nev', {}), tim = nget_('ntim', {}), tz = set.tz || 'Asia/Jerusalem', now = new Date();
+  var f = Object.keys(ev).map(function (k) { return ev[k]; }).filter(function (e) { return !e.x && (e.y === 'feed' || e.y === 'bottle'); }).sort(function (a, b) { return b.e - a.e; })[0];
+  var t = function (ms) { return ms ? Utilities.formatDate(new Date(ms), tz, 'dd.MM HH:mm') : '—'; };
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(DIAG_TAB) || ss.insertSheet(DIAG_TAB);
+  var log = (nget_('nlog', []) || []).concat(nlog_.map(function (l) { return Utilities.formatDate(now, tz, 'dd.MM HH:mm') + '  ' + l; })).slice(-15);
+  nput_('nlog', log);
+  var rows = [['בדיקה אחרונה', Utilities.formatDate(now, tz, 'dd.MM HH:mm:ss')], ['גרסת קוד', NVER], ['ערוץ מוגדר', set.topic ? 'כן' : 'לא'],
+    ['הנקה אחרונה הסתיימה', f ? t(f.e) : '—'], ['צד אחרון', f && f.s ? f.s : '—'], ['הנקה הבאה', f && set.every ? t(f.e + set.every * 36e5) : '—'],
+    ['טיימר הנקה פעיל', tim.feed ? 'כן' : 'לא'], ['התראה לפני (דק׳)', (set.leads || []).join(', ') || '—'], ['שורות שנקראו', PropertiesService.getScriptProperties().getProperty('nrow') || '0'],
+    ['שגיאה', err || '—'], ['', ''], ['התראות אחרונות (קוד 200 = התקבלה ב-ntfy)', '']].concat(log.slice().reverse().map(function (l) { return [l, '']; }));
+  sh.clearContents(); sh.getRange(1, 1, rows.length, 2).setValues(rows);
+}
+function tick_() {
+  var P = PropertiesService.getScriptProperties();
   var set = nget_('nset', null);
   if (!set || !set.topic) return;
   var ev = nget_('nev', {}), tim = nget_('ntim', {}), sent = nget_('nsent', {}), now = Date.now(), tz = set.tz || 'Asia/Jerusalem';
@@ -246,7 +283,7 @@ function notifyTick() {
     // sent once per feed, any time before the next one is due, at normal priority so it stays on the lock screen
     var lastBreast = feeds.filter(function (e) { return e.y === 'feed' && e.s; })[0];
     var nextSide = lastBreast ? ({ R: 'שמאל', L: 'ימין' })[lastBreast.s] || '' : '';
-    if (set.end && (due ? now < due - 2 * 6e4 : now - end < 3 * 36e5)) once('e' + end, function () {
+    if (set.end && (due ? now < due - 2 * 6e4 : now - end < 3 * 36e5)) once('e' + NVER + ':' + end, function () {
       send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), [due ? 'הבאה ב-' + hm(due) : '', nextSide ? 'צד הבא: ' + nextSide : ''].filter(String).join(' · ') || 'נרשם ביומן', 3, ['baby_bottle'], null, app); });
     // several "minutes before" alerts; if more than one is already due (e.g. phone was offline), send only the closest one
     var hitL = (set.leads || []).filter(function (l) { return now >= due - l * 6e4; }).sort(function (a, b) { return a - b; });
