@@ -161,7 +161,7 @@ function ingest_(jsons) {
     if (!r || !r.d) return;
     var u = r.u || 0, d = r.d;
     if (r.k === 'set' && u >= (set.u || 0)) {
-      set = { u: u, every: +d.feedEvery || 0, lead: d.notifyLead == null ? 10 : +d.notifyLead, end: d.notifyEnd !== false, due: d.notifyDue !== false, water: d.notifyWater !== false,
+      set = { u: u, every: +d.feedEvery || 0, leads: (Array.isArray(d.notifyLeads) ? d.notifyLeads : [d.notifyLead == null ? 10 : d.notifyLead]).map(Number).filter(function (v) { return v > 0; }), end: d.notifyEnd !== false, due: d.notifyDue !== false, water: d.notifyWater !== false,
         pain: d.notifyPain === true, gap: d.momGap || {}, app: d.appUrl || '', meds: d.notifyMeds !== false,
         topic: d.ntfy || '', tz: d.tz || 'Asia/Jerusalem', w: d.water || {},
         daily: (d.daily || []).filter(function (x) { return x.notify !== false; }).map(function (x) { return { id: x.id, l: x.label, t: x.time, m: x.who === 'mom' ? 1 : 0 }; }) };
@@ -243,8 +243,14 @@ function notifyTick() {
     var end = feeds[0].e, due = set.every ? end + set.every * 36e5 : 0;
     if (set.end && now - end < 20 * 6e4) once('e' + end, function () {
       send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), due ? 'ההנקה הבאה ב-' + hm(due) + ' (בעוד ' + set.every + ' ש׳)' : 'נרשם ביומן', 2, ['baby_bottle'], null, app); });
-    if (due && set.lead > 0 && now >= due - set.lead * 6e4 && now < due) once('p' + end, function () {
-      send_(set.topic, 'הנקה בעוד ' + Math.max(1, Math.round((due - now) / 6e4)) + ' דק׳', 'הבאה ב-' + hm(due) + ' · האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle', 'alarm_clock'], null, app); });
+    // several "minutes before" alerts; if more than one is already due (e.g. phone was offline), send only the closest one
+    var hitL = (set.leads || []).filter(function (l) { return now >= due - l * 6e4; }).sort(function (a, b) { return a - b; });
+    if (due && hitL.length && now < due) {
+      var fresh = hitL.filter(function (l) { return !sent['p' + l + ':' + end]; });
+      if (fresh.length) { hitL.forEach(function (l) { if (l !== fresh[0]) sent['p' + l + ':' + end] = now; });
+        once('p' + fresh[0] + ':' + end, function () {
+          send_(set.topic, 'הנקה בעוד ' + Math.max(1, Math.round((due - now) / 6e4)) + ' דק׳', 'הבאה ב-' + hm(due) + ' · האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle', 'alarm_clock'], null, app); }); }
+    }
     if (due && set.due && now >= due && now < due + 3 * 36e5) once('d' + end, function () {
       send_(set.topic, 'הגיע הזמן להנקה', 'האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle'], [['עוד 15 דק׳', { action: 'snooze', key: 'd' + end, min: 15 }]], app); });
   }

@@ -358,6 +358,8 @@ const round1=n=>Math.round(n*10)/10;
 
 /* ---------- state & storage ---------- */
 const MOM=()=>(S.settings.momName||'').trim()||'אמא';
+/* minutes-before-feed alerts; several can be chosen (older settings kept a single number) */
+const leads=()=>{const s=S.settings;const a=Array.isArray(s.notifyLeads)?s.notifyLeads:(+s.notifyLead?[+s.notifyLead]:[]);return [...new Set(a.map(Number).filter(v=>v>0))].sort((x,y)=>y-x)};
 const DEF={notifyDue:true,notifyPain:false,appUrl:'',notifyLead:10,notifyEnd:true,notifyWater:true,notifyMeds:true,ntfy:'',tz:'',mergeMin:40,momName:'',momExtra:[],name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{},water:{goal:0,ml:0,start:'07:00',end:'22:00'}};
 const S={days:{},questions:{},settings:{...DEF},timers:{feed:null,sleep:null},mode:'local'};
 const LS='babylog.v1';
@@ -691,9 +693,10 @@ function sysNotify(body,kind){
 }
 let preSeen='';
 function feedPreAlert(){
-  const lead=+S.settings.notifyLead||0,every=+S.settings.feedEvery||0;if(!lead||!every||S.timers.feed)return;
+  const ls=leads(),every=+S.settings.feedEvery||0;if(!ls.length||!every||S.timers.feed)return;
   const lf=lastOf(['feed','bottle']);if(!lf)return;const due=feedEnd(lf)+every*36e5,now=Date.now();
-  if(now<due-lead*6e4||now>=due||preSeen===String(due))return;preSeen=String(due);
+  const hit=ls.filter(l=>now>=due-l*6e4).pop();if(hit==null||now>=due)return;
+  const key=due+':'+hit;if(preSeen.split(',').includes(key))return;preSeen=ls.filter(l=>now>=due-l*6e4).map(l=>due+':'+l).join(',');
   const txt=feedWord()+' בעוד '+Math.max(1,Math.round((due-now)/6e4))+' דק׳ (ב-'+hm(due)+')';
   if(!document.hidden)toast('🍼 '+txt);
   sysNotify(txt);
@@ -856,9 +859,9 @@ function renderPrefs(){
    <div class="row" style="margin-top:8px;flex-wrap:nowrap"><input class="in" id="rLabel" placeholder="למשל: ויטמין D" aria-label="שם התזכורת"><input class="in" type="time" id="rTime" value="09:00" style="max-width:120px" aria-label="שעה"><button class="btn" type="button" id="rAdd">הוספה</button></div>
    <p class="note">התזכורות מופיעות כבאנר כשהיומן פתוח. איזה מהן יקפצו גם כהתראה בטלפון בוחרים בלשונית "התראות".</p>
    <div class="row" style="justify-content:space-between;margin-top:14px"><span>מסך דלוק בזמן טיימר הנקה</span><div class="seg"><button type="button" data-awake="1" class="${s.keepAwake!==false?'on':''}">פעיל</button><button type="button" data-awake="0" class="${s.keepAwake===false?'on':''}">כבוי</button></div></div></div>`;
-  const nl=+s.notifyLead||0,rems=(s.daily||[]);
+  const nl=leads(),rems=(s.daily||[]);
   h+=`<div class="card" data-cat="notif"><h2>על מה להתריע</h2><p class="note" style="margin-top:0">רק מה שמסומן "פעיל" יקפוץ כהתראה בטלפון. הבאנרים בתוך היומן נשארים בכל מקרה.</p>
-   <label class="f">לפני ההנקה הבאה</label><div class="seg">${[0,5,10,15,20].map(v=>`<button type="button" data-lead="${v}" class="${nl===v?'on':''}">${v?v+' דק׳':'כבוי'}</button>`).join('')}</div>
+   <label class="f">לפני ההנקה הבאה (אפשר לבחור כמה)</label><div class="seg">${[0,5,10,15,20,30].map(v=>`<button type="button" data-lead="${v}" aria-pressed="${v?nl.includes(v):!nl.length}" class="${v?(nl.includes(v)?'on':''):(nl.length?'':'on')}">${v?v+' דק׳':'כבוי'}</button>`).join('')}</div>
    <p class="note" style="margin-bottom:4px">לפי "תזכורת ${feedWord()} אחרי" בלשונית תזכורות, מסיום ההנקה האחרונה.</p>
    ${nrow('הגיע הזמן להנקה','notifyDue')}
    ${nrow('הנקה הסתיימה (עם שעת ההנקה הבאה)','notifyEnd')}
@@ -1284,7 +1287,8 @@ document.addEventListener('click',ev=>{
   if(d.wdel){const l=eventsOn(dayKey(Date.now())).filter(e=>e.type==='water').pop();if(l){removeEvent(l);toast('הוסר בקבוק אחד','ביטול',()=>putEvent({...l,del:false}))}return}
   if(d.rsnooze){localOnly.rsn={...(localOnly.rsn||{}),[d.rsnooze]:Date.now()+30*6e4};persistUI();renderAll();toast('נזכיר שוב בעוד 30 דק׳');return}
   if(d.wsnooze){localOnly.wSnooze=Date.now()+36e5;persistUI();renderAll();return}
-  if(d.lead!==undefined){S.settings={...S.settings,notifyLead:+d.lead};saveSettings();renderPrefs();return}
+  if(d.lead!==undefined){const v=+d.lead,cur=leads();const next=!v?[]:cur.includes(v)?cur.filter(x=>x!==v):[...cur,v];
+    S.settings={...S.settings,notifyLeads:next.sort((x,y)=>y-x),notifyLead:next.length?Math.min(...next):0};saveSettings();renderPrefs();return}
   if(d.ntog){S.settings={...S.settings,[d.ntog]:d.v==='1'};saveSettings();renderPrefs();return}
   if(el.id==='ntfyOn'){const r=Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>b.toString(36).padStart(2,'0')).join('').slice(0,20);S.settings={...S.settings,ntfy:'babylog-'+r,tz:Intl.DateTimeFormat().resolvedOptions().timeZone,appUrl:location.origin+location.pathname};saveSettings();renderPrefs();return}
   if(el.id==='ntfyOff'){S.settings={...S.settings,ntfy:''};saveSettings();renderPrefs();return}
