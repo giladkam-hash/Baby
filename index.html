@@ -716,7 +716,7 @@ function sysNotify(body,kind){
   if(kind&&S.settings[kind]===false)return;
   try{if('Notification' in window&&Notification.permission==='granted')new Notification('יומן התינוקת',{body})}catch(e){}
 }
-const APP_VER='2026.11.21-c',SRV_NEED='10';
+const APP_VER='2026.11.21-d',SRV_NEED='10';
 /* Health of the phone-notification chain, read from the sheet script (ntfy enabled only). Problems are shown on the home screen. */
 let health={issues:[],bad:0,at:0};
 async function ntfyHealth(){
@@ -1165,10 +1165,10 @@ function commit(extra){
   if(navigator.vibrate)try{navigator.vibrate(15)}catch(_){}
 }
 
-/* keep the screen awake while a feeding timer is running (not paused) */
+/* keep the screen awake for the whole feeding session */
 let wl=null,wlBusy=false;
 async function wakeSync(){
-  const want=!!(S.timers.feed&&!S.timers.feed.paused)&&!document.hidden&&S.settings.keepAwake!==false;
+  const want=!!S.timers.feed&&!document.hidden&&S.settings.keepAwake!==false; /* the whole feeding session, pauses included, until it is saved or cancelled */
   if(wlBusy||!('wakeLock' in navigator))return;wlBusy=true;
   try{if(want&&!wl){wl=await navigator.wakeLock.request('screen');wl.addEventListener('release',()=>{wl=null})}else if(!want&&wl){const w=wl;wl=null;await w.release()}}catch(e){wl=null}
   wlBusy=false;

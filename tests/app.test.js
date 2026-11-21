@@ -56,5 +56,13 @@ let passed = 0; const test = async (name, fn) => { try { await fn(); passed++; c
     const p = await newPage(withCfg({ momName: 'קרן', name: 'נועה' })); await p.click('[data-open="weight"]'); await p.click('[data-wmode="calc"]'); await p.locator('#wMom').pressSequentially('62.4'); await p.locator('#wBoth').pressSequentially('65.5');
     assert.strictEqual(await p.inputValue('#wBaby'), '3.100'); await p.click('#wOk'); await p.click('#wSave'); await p.waitForTimeout(300); assert.strictEqual(await p.evaluate(() => lastWeight().kg), 3.1);
   });
+  await test('screen stays awake through pause and the review, and is released after saving', async () => {
+    const p = await newPage(); await p.addInitScript(() => { window.__wl = { req: 0, rel: 0 }; Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async () => { window.__wl.req++; return { addEventListener() {}, release: async () => { window.__wl.rel++; } }; } } }); }); await p.reload(); await p.waitForTimeout(400);
+    await p.click('[data-open="feed"]'); await p.click('[data-pick="R"]'); await p.click('[data-pick="timer"]'); await p.waitForTimeout(400);
+    let w = await p.evaluate(() => window.__wl); assert.strictEqual(w.req, 1, 'locked at start'); assert.strictEqual(w.rel, 0);
+    await p.click('#tPause'); await p.waitForTimeout(400); w = await p.evaluate(() => window.__wl); assert.strictEqual(w.rel, 0, 'not released on pause');
+    await p.click('#tPause'); await p.click('#tStop'); await p.waitForTimeout(400); w = await p.evaluate(() => window.__wl); assert.strictEqual(w.rel, 0, 'not released on the review screen');
+    await p.click('#goNext'); await p.click('#rvSave'); await p.waitForTimeout(600); w = await p.evaluate(() => window.__wl); assert.strictEqual(w.rel, 1, 'released after saving');
+  });
   await browser.close(); server.close(); console.log(`\n${passed} passed`);
 })();
