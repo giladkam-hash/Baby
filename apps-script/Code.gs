@@ -139,7 +139,7 @@ function rebuildClean() { rebuildClean_(sheet_()); }
  * (approve the permissions), then Deploy ← Manage deployments ← edit ← New version.
  * A trigger then runs notifyTick every minute. It reads only a small saved summary, not the sheet. */
 var NTFY = 'https://ntfy.sh/';
-var NVER = '6';
+var NVER = '7';
 /* the ntfy token: the script property NTFY_TOKEN, or any script property whose value looks like a token (tk_...) */
 function token_() {
   var all = PropertiesService.getScriptProperties().getProperties(), t = all.NTFY_TOKEN || '';
@@ -292,10 +292,12 @@ function tick_() {
   var feeds = list.filter(function (e) { return e.y === 'feed' || e.y === 'bottle'; }).sort(function (a, b) { return b.e - a.e; });
   if (feeds.length && !tim.feed) {
     var end = feeds[0].e, due = set.every ? end + set.every * 36e5 : 0;
-    // sent once per feed, any time before the next one is due, at normal priority so it stays on the lock screen
+    // status note: right when the (last) feed ends, then again every 30 minutes until the next feed is due.
+    // "end" is always the latest feed, so when a feed is split (pause, then the other side) the schedule restarts from the last part.
     var lastBreast = feeds.filter(function (e) { return e.y === 'feed' && e.s; })[0];
     var nextSide = lastBreast ? ({ R: 'שמאל', L: 'ימין' })[lastBreast.s] || '' : '';
-    if (set.end && (due ? now < due - 2 * 6e4 : now - end < 3 * 36e5)) once('e' + NVER + ':' + end, function () {
+    var slot = Math.floor((now - end) / (30 * 6e4));
+    if (set.end && (due ? now < due - 2 * 6e4 : slot === 0)) once('e' + NVER + ':' + end + ':' + slot, function () {
       return send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), [due ? 'הבאה ב-' + hm(due) : '', nextSide ? 'צד הבא: ' + nextSide : ''].filter(String).join(' · ') || 'נרשם ביומן', 4, ['baby_bottle'], null, app); });
     // several "minutes before" alerts; if more than one is already due (e.g. phone was offline), send only the closest one
     var hitL = (set.leads || []).filter(function (l) { return now >= due - l * 6e4; }).sort(function (a, b) { return a - b; });
