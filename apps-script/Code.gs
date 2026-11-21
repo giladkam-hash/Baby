@@ -214,8 +214,8 @@ function send_(topic, title, message, prio, tags, btns, click) {
   var msg = { topic: topic, title: title, message: message, priority: prio || 3, tags: tags || [] }, url = '';
   try { url = ScriptApp.getService().getUrl() || ''; } catch (e) {}
   if (click) msg.click = click;
-  if (url && btns && btns.length) msg.actions = btns.map(function (b) {
-    return { action: 'http', label: b[0], url: url, method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(b[1]), clear: true }; });
+  // no action buttons: the ntfy iPhone app does not show notifications that carry them (seen on 21.11).
+  // Tapping the notification opens the journal, where the banners have the same buttons.
   var code = 0, body = '';
   // Google's servers share IP addresses, and ntfy.sh limits anonymous senders per IP. A free ntfy.sh access token,
   // saved as the script property NTFY_TOKEN (Project Settings ← Script Properties), gives this script its own quota.
