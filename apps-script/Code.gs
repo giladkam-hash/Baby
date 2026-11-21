@@ -139,7 +139,7 @@ function rebuildClean() { rebuildClean_(sheet_()); }
  * (approve the permissions), then Deploy ← Manage deployments ← edit ← New version.
  * A trigger then runs notifyTick every minute. It reads only a small saved summary, not the sheet. */
 var NTFY = 'https://ntfy.sh/';
-var NVER = '7';
+var NVER = '8';
 /* the ntfy token: the script property NTFY_TOKEN, or any script property whose value looks like a token (tk_...) */
 function token_() {
   var all = PropertiesService.getScriptProperties().getProperties(), t = all.NTFY_TOKEN || '';
@@ -173,13 +173,15 @@ function ingest_(jsons) {
       set = { u: u, every: +d.feedEvery || 0, leads: (Array.isArray(d.notifyLeads) ? d.notifyLeads : [d.notifyLead == null ? 10 : d.notifyLead]).map(Number).filter(function (v) { return v > 0; }), end: d.notifyEnd !== false, due: d.notifyDue !== false, water: d.notifyWater !== false,
         pain: d.notifyPain === true, gap: d.momGap || {}, app: d.appUrl || '', meds: d.notifyMeds !== false,
         topic: d.ntfy || '', tz: d.tz || 'Asia/Jerusalem', w: d.water || {},
+        merge: d.mergeMin == null ? 40 : +d.mergeMin, imm: d.notifyImmMin == null ? 30 : +d.notifyImmMin,
+        wait: +d.notifyWaitMin > 0 ? +d.notifyWaitMin : (+d.autoWaitMin > 0 ? +d.autoWaitMin : 10),
         daily: (d.daily || []).filter(function (x) { return x.notify !== false; }).map(function (x) { return { id: x.id, l: x.label, t: x.time, m: x.who === 'mom' ? 1 : 0 }; }) };
       changed = true;
     } else if (r.k === 'tim' && u >= (tim.u || 0)) { tim = { u: u, feed: !!d.feed }; changed = true; }
     else if (r.k === 'ev' && /^(feed|bottle|water|med|mmed)$/.test(d.type) && d.t > now - 2 * 864e5) {
       var cur = ev[d.id];
       if (!cur || (cur.u || 0) <= u) {
-        ev[d.id] = { y: d.type, t: d.t, e: d.end || (d.dur ? d.t + d.dur * 6e4 : d.t), n: d.name || '', c: +d.n || 1, s: d.lastSide || d.side || '', x: d.del ? 1 : 0, u: u };
+        ev[d.id] = { y: d.type, t: d.t, e: d.end || (d.dur ? d.t + d.dur * 6e4 : d.t), n: d.name || '', c: +d.n || 1, s: d.lastSide || d.side || '', m: +d.dur || 0, x: d.del ? 1 : 0, u: u };
         changed = true;
       }
     }
@@ -270,7 +272,7 @@ function diag_(err) {
   var rows = [['בדיקה אחרונה', Utilities.formatDate(now, tz, 'dd.MM HH:mm:ss')], ['גרסת קוד', NVER], ['ערוץ מוגדר', set.topic ? 'כן' : 'לא'], ['טוקן ntfy', token_() ? 'מוגדר (' + token_().slice(0, 5) + '…)' : 'חסר'],
     ['שמות בהגדרות הסקריפט', Object.keys(PropertiesService.getScriptProperties().getProperties()).filter(function (k) { return !/^n(set|ev|tim|sent|snz|log|last|ver|row)$/.test(k); }).map(function (k) { return /^tk_/.test(k) ? 'tk_…' : k; }).join(', ') || '—'],
     ['הנקה אחרונה הסתיימה', f ? t(f.e) : '—'], ['צד אחרון', f && f.s ? f.s : '—'], ['הנקה הבאה', f && set.every ? t(f.e + set.every * 36e5) : '—'],
-    ['טיימר הנקה פעיל', tim.feed ? 'כן' : 'לא'], ['התראה לפני (דק׳)', (set.leads || []).join(', ') || '—'], ['שורות שנקראו', PropertiesService.getScriptProperties().getProperty('nrow') || '0'],
+    ['טיימר הנקה פעיל', tim.feed ? 'כן' : 'לא'], ['שולח מיד מעל (דק׳ נטו)', set.imm == null ? '30' : String(set.imm)], ['המתנה אחרי הנקה קצרה (דק׳)', String(set.wait || 10)], ['התראה לפני (דק׳)', (set.leads || []).join(', ') || '—'], ['שורות שנקראו', PropertiesService.getScriptProperties().getProperty('nrow') || '0'],
     ['שגיאה', err || '—'], ['', ''], ['התראות אחרונות (קוד 200 = התקבלה ב-ntfy)', '']].concat(log.slice().reverse().map(function (l) { return [l, '']; }));
   sh.clearContents(); sh.getRange(1, 1, rows.length, 2).setValues(rows);
 }
@@ -296,8 +298,14 @@ function tick_() {
     // "end" is always the latest feed, so when a feed is split (pause, then the other side) the schedule restarts from the last part.
     var lastBreast = feeds.filter(function (e) { return e.y === 'feed' && e.s; })[0];
     var nextSide = lastBreast ? ({ R: 'שמאל', L: 'ימין' })[lastBreast.s] || '' : '';
-    var slot = Math.floor((now - end) / (30 * 6e4));
-    if (set.end && (due ? now < due - 2 * 6e4 : slot === 0)) once('e' + NVER + ':' + end + ':' + slot, function () {
+    // the current feed = the latest feed plus earlier parts that started within "merge" minutes of the previous part's end
+    var grp = [feeds[0]], mg = (set.merge >= 0 ? set.merge : 40) * 6e4;
+    for (var gi = 1; gi < feeds.length; gi++) { if (grp[grp.length - 1].t - feeds[gi].e <= mg) grp.push(feeds[gi]); else break; }
+    var net = grp.reduce(function (a, e) { return a + (e.m || 0); }, 0);
+    // long feed (net minutes ≥ imm): announce right away; short feed: wait, since she may switch sides (a running timer also holds it)
+    var start = end + (net >= (set.imm || 30) ? 0 : (set.wait || 10) * 6e4);
+    var slot = Math.floor((now - start) / (30 * 6e4));
+    if (set.end && now >= start && (due ? now < due - 2 * 6e4 : slot === 0)) once('e' + NVER + ':' + end + ':' + slot, function () {
       return send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), [due ? 'הבאה ב-' + hm(due) : '', nextSide ? 'צד הבא: ' + nextSide : ''].filter(String).join(' · ') || 'נרשם ביומן', 4, ['baby_bottle'], null, app); });
     // several "minutes before" alerts; if more than one is already due (e.g. phone was offline), send only the closest one
     var hitL = (set.leads || []).filter(function (l) { return now >= due - l * 6e4; }).sort(function (a, b) { return a - b; });

@@ -244,6 +244,7 @@ nav.tabs button.on{color:var(--accent)}
 .pcats{display:flex;gap:6px;flex-wrap:wrap;margin:0 -2px 12px;padding:2px}
 .pcats button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:8px 14px;font-size:14px}
 .pcats button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.nsub{padding:2px 0 10px;border-bottom:1px solid var(--line)}
 .nrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
 .nrow:last-child{border-bottom:0}
 .nrow .seg{flex:none}
@@ -360,7 +361,7 @@ const round1=n=>Math.round(n*10)/10;
 const MOM=()=>(S.settings.momName||'').trim()||'אמא';
 /* minutes-before-feed alerts; several can be chosen (older settings kept a single number) */
 const leads=()=>{const s=S.settings;const a=Array.isArray(s.notifyLeads)?s.notifyLeads:(+s.notifyLead?[+s.notifyLead]:[]);return [...new Set(a.map(Number).filter(v=>v>0))].sort((x,y)=>y-x)};
-const DEF={notifyDue:true,notifyPain:false,appUrl:'',notifyLead:10,notifyEnd:true,notifyWater:true,notifyMeds:true,ntfy:'',tz:'',mergeMin:40,momName:'',momExtra:[],name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{},water:{goal:0,ml:0,start:'07:00',end:'22:00'}};
+const DEF={notifyImmMin:30,notifyWaitMin:'',autoWaitMin:0,notifyDue:true,notifyPain:false,appUrl:'',notifyLead:10,notifyEnd:true,notifyWater:true,notifyMeds:true,ntfy:'',tz:'',mergeMin:40,momName:'',momExtra:[],name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{},water:{goal:0,ml:0,start:'07:00',end:'22:00'}};
 const S={days:{},questions:{},settings:{...DEF},timers:{feed:null,sleep:null},mode:'local'};
 const LS='babylog.v1';
 try{const raw=localStorage.getItem(LS);if(raw){const x=JSON.parse(raw);Object.assign(S,{days:x.days||{},questions:x.questions||{},settings:{...DEF,...(x.settings||{})},timers:x.timers||{feed:null,sleep:null}})}}catch(e){}
@@ -455,6 +456,13 @@ function recent(days){const out=[];const t=dayKey(Date.now());for(let i=days-1;i
 function lastOf(types){const ev=recent(4).filter(e=>types.includes(e.type));return ev[ev.length-1]||null}
 function nextSide(){const f=recent(4).filter(e=>e.type==='feed'&&e.side);const l=f[f.length-1];if(!l)return null;const s=l.lastSide||l.side;return s==='R'?'L':s==='L'?'R':null}
 /* breastfeeds that start within mergeMin minutes of the previous one's end are one feeding session */
+function autoWait(){
+  const gaps=[];feedSessions(recent(14)).forEach(g=>{for(let i=1;i<g.items.length;i++)gaps.push((g.items[i].t-feedEnd(g.items[i-1]))/6e4)});
+  const ok=gaps.filter(x=>x>=0);if(ok.length<3)return {min:0,n:ok.length};
+  return {min:Math.min(40,Math.max(5,Math.round(ok.reduce((a,b)=>a+b,0)/ok.length))),n:ok.length};
+}
+/* keeps settings.autoWaitMin in step with the data, so the server (which only sees settings) uses it */
+function syncAutoWait(){const a=autoWait().min;if(a&&a!==+S.settings.autoWaitMin){S.settings={...S.settings,autoWaitMin:a};saveSettings()}}
 function feedSessions(list){
   const gap=(+S.settings.mergeMin>=0?+S.settings.mergeMin:40)*6e4,out=[];
   list.filter(e=>e.type==='feed').sort((a,b)=>a.t-b.t).forEach(e=>{
@@ -702,6 +710,7 @@ function feedPreAlert(){
   sysNotify(txt);
 }
 setInterval(feedPreAlert,30000);
+setTimeout(syncAutoWait,4000);
 setTimeout(()=>{try{const z=Intl.DateTimeFormat().resolvedOptions().timeZone;if(S.settings.ntfy&&z&&S.settings.tz!==z){S.settings={...S.settings,tz:z};saveSettings()}}catch(e){}},3000);setTimeout(feedPreAlert,5000);
 let notified={};
 function notifyCheck(){
@@ -865,6 +874,10 @@ function renderPrefs(){
    <p class="note" style="margin-bottom:4px">לפי "תזכורת ${feedWord()} אחרי" בלשונית תזכורות, מסיום ההנקה האחרונה.</p>
    ${nrow('הגיע הזמן להנקה','notifyDue')}
    ${nrow('הנקה הסתיימה (עם שעת ההנקה הבאה)','notifyEnd')}
+   ${s.notifyEnd!==false?(()=>{const a=autoWait();return `<div class="nsub">
+     <label class="f" for="pImm">שולחים מיד אם ההנקה נמשכה לפחות (דק׳ נטו, בלי השהיות)</label><input class="in" type="number" inputmode="numeric" min="0" id="pImm" value="${s.notifyImmMin??30}">
+     <label class="f" for="pWait">אחרת מחכים (דק׳) כדי לראות אם תמשיך לצד השני</label><input class="in" type="number" inputmode="numeric" min="0" id="pWait" value="${+s.notifyWaitMin>0?+s.notifyWaitMin:''}" placeholder="${a.min?'אוטומטי: '+a.min:'אוטומטי: 10'}">
+     <p class="note">ריק = אוטומטי: ממוצע ההפסקה בין חלקים של הנקה מפוצלת ב-14 הימים האחרונים${a.min?' ('+a.min+' דק׳, לפי '+a.n+' הפסקות)':' (עד שיהיו לפחות 3 הפסקות: 10 דק׳)'}. אם בזמן ההמתנה מופעל טיימר הנקה, ההתראה מחכה לסוף ההנקה החדשה.</p></div>`})():''}
    ${nrow('מים ל'+MOM()+' כשהקצב מאחור','notifyWater')}
    ${nrow('תרופה לשיכוך כאבים: אפשר לקחת שוב','notifyPain',false)}
    ${rems.length?`<label class="f">תזכורות יומיות</label>${rems.map(r=>`<div class="nrow"><span>${esc(r.label)} ${r.who==='mom'?'('+esc(MOM())+')':'(תינוקת)'} · <span class="num">${esc(r.time)}</span></span><div class="seg"><button type="button" data-rnot="${r.id}" data-v="1" class="${r.notify!==false?'on':''}">פעיל</button><button type="button" data-rnot="${r.id}" data-v="0" class="${r.notify===false?'on':''}">כבוי</button></div></div>`).join('')}`:''}
@@ -1104,6 +1117,7 @@ function commit(extra){
   if(!e.tags||!e.tags.length)delete e.tags;if(!e.note)delete e.note;if(!e.photos||!e.photos.length)delete e.photos;
   putEvent(e);closeSheet();
   if(fromFeed){S.timers={...S.timers,feed:null};saveTimers()}
+  if(e.type==='feed')setTimeout(syncAutoWait,500);
   if(fromSleep){S.timers={...S.timers,sleep:null};saveTimers()}
   toast('נשמר: '+T[e.type].l+(desc(e)?' · '+desc(e):''),'ביטול',()=>removeEvent(e));
   if(navigator.vibrate)try{navigator.vibrate(15)}catch(_){}
@@ -1386,6 +1400,8 @@ document.addEventListener('change',ev=>{
   if(el.id==='pMom'){S.settings={...S.settings,momName:el.value.trim()};saveSettings();return}
   if(el.id==='pBirth'){S.settings={...S.settings,birth:el.value};saveSettings();return}
   if(el.id==='pGap'){S.settings={...S.settings,gapH:+el.value||0};saveSettings();return}
+  if(el.id==='pImm'){S.settings={...S.settings,notifyImmMin:Math.max(0,+el.value||0)};saveSettings();return}
+  if(el.id==='pWait'){const v=String(el.value).trim();S.settings={...S.settings,notifyWaitMin:v===''?'':Math.max(1,+v||0)};saveSettings();renderPrefs();return}
   if(el.id==='pMerge'){S.settings={...S.settings,mergeMin:Math.max(0,+el.value||0)};saveSettings();return}
   if(el.id==='pWet'){S.settings={...S.settings,minWet:+el.value||0};saveSettings();return}
   if(el.dataset.water){const k=el.dataset.water,v=k==='start'||k==='end'?el.value:Math.max(0,+el.value||0);if((k==='start'||k==='end')&&!v)return;S.settings={...S.settings,water:{...wSet(),[k]:v}};saveSettings();return}
