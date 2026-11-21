@@ -27,5 +27,8 @@ jobs:
           mkdir _site
           cp -r index.html sw.js manifest.webmanifest *.png apps-script .nojekyll _site/
       - uses: actions/upload-pages-artifact@v3
+      # GitHub sometimes doesn't list a just-uploaded artifact yet; a short wait avoids a failed deploy
+      - name: המתנה קצרה
+        run: sleep 20
       - id: deployment
         uses: actions/deploy-pages@v4
