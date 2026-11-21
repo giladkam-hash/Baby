@@ -393,7 +393,23 @@ function putEvent(e,keepU,remote){
 function removeEvent(e){putEvent({...e,del:true})}
 function putQ(q,keepU,remote){q=clean(q);if(!keepU||!q.u)q.u=Date.now();S.questions={...S.questions,[q.id]:q};persist();if(!remote){enqueue('q',q.id,q);renderAll()}}
 function delQ(id){const q=S.questions[id];if(q)putQ({...q,del:true})}
-function saveSettings(){S.settings={...S.settings,u:Date.now()};persist();enqueue('set','settings',S.settings);renderAll()}
+/* Settings are merged per field: every changed field is stamped (settings.fu[field]), so two phones can no longer
+ * overwrite each other's other fields with stale values. */
+let setBase={};
+function snapSettings(){setBase={};for(const k in S.settings)if(k!=='u'&&k!=='fu')setBase[k]=JSON.stringify(S.settings[k])}
+(function(){const s=S.settings;if(!s.fu){s.fu={};for(const k in s)if(k!=='u'&&k!=='fu')s.fu[k]=s.u||0}snapSettings()})();
+function saveSettings(){
+  const now=Date.now(),fu={...(S.settings.fu||{})};
+  for(const k in S.settings){if(k==='u'||k==='fu')continue;if(JSON.stringify(S.settings[k])!==setBase[k])fu[k]=now}
+  S.settings={...S.settings,fu,u:now};snapSettings();persist();enqueue('set','settings',S.settings);renderAll();
+}
+function mergeSettings(rd,ru){
+  const L=S.settings,lfu=L.fu||{},rfu=rd.fu||null,out={...L},fu={...lfu};let ch=false;
+  for(const k of Object.keys(rd)){if(k==='u'||k==='fu')continue;
+    const lt=lfu[k]||0,rt=rfu?(rfu[k]||0):ru;   /* an older app sends no per-field times: the whole object counts as one change */
+    if(rt>lt){fu[k]=rt;if(JSON.stringify(rd[k])!==JSON.stringify(L[k])){out[k]=rd[k];ch=true}}}
+  S.settings={...out,fu,u:Math.max(L.u||0,ru)};snapSettings();return ch;
+}
 function saveTimers(){S.timers={feed:S.timers.feed||null,sleep:S.timers.sleep||null,u:Date.now()};persist();enqueue('tim','timers',S.timers);renderAll()}
 
 function setMode(){
@@ -436,7 +452,7 @@ function applyRemote(r){
   if(!r||!r.k||!r.d)return false;const u=r.u||0;
   if(r.k==='ev'){const cur=findById(r.d.id);if(!cur||(cur.u||cur.t)<u){putEvent(r.d,true,true);return true}return false}
   if(r.k==='q'){const q=S.questions[r.d.id];if(!q||(q.u||q.t)<u){putQ(r.d,true,true);return true}return false}
-  if(r.k==='set'){if((S.settings.u||0)<u){S.settings={...DEF,...r.d};return true}return false}
+  if(r.k==='set')return mergeSettings(r.d,u);
   if(r.k==='tim'){if((S.timers.u||0)<u){S.timers={feed:r.d.feed||null,sleep:r.d.sleep||null,u};return true}return false}
   return false;
 }
@@ -690,6 +706,7 @@ function dueReminders(){
 }
 function remindersHTML(){
   let b='';const k=dayKey(Date.now());
+  if(S.settings.ntfy&&health.bad>=2&&health.issues.length)b+=`<div class="banner"><span class="grow">⚠️ התראות הטלפון הנעול לא תקינות: ${esc(health.issues.join(' · '))}</span><button type="button" data-goto="prefs" data-pcat="notif">לפרטים</button></div>`;
   if(cfg.url&&sync.status==='err'&&navigator.onLine!==false)b+=`<div class="banner"><span class="grow">הסנכרון לגוגל שיטס לא הושלם</span><button type="button" data-goto="prefs">לפרטים</button></div>`;
   else if(!cfg.url&&recent(30).length>=5&&localOnly.dismiss.backup!==k)b+=`<div class="banner"><span class="grow">כדאי לחבר גיבוי לגוגל שיטס כדי שהמידע לא יאבד</span><button type="button" data-goto="prefs">חיבור</button><button type="button" id="bkLater">לא היום</button></div>`;
   return b+dueReminders().filter(r=>r.id!=='feed').map(r=>`<div class="banner"><span class="grow">${esc(r.txt)}</span>${r.act?`<button type="button" data-open="${r.act}">${r.actL}</button>`:`<button type="button" ${r.mom?'data-momtake':'data-givemed'}="${esc(r.med)}">${r.actL}</button>`}${r.snooze?`<button type="button" data-snooze="1">עוד 15 דק׳</button>`:`<button type="button" data-rsnooze="${r.id}">עוד 30 דק׳</button><button type="button" data-dismiss="${r.id}">לא היום</button>`}</div>`).join('')}
@@ -699,6 +716,27 @@ function sysNotify(body,kind){
   if(kind&&S.settings[kind]===false)return;
   try{if('Notification' in window&&Notification.permission==='granted')new Notification('יומן התינוקת',{body})}catch(e){}
 }
+const APP_VER='2026.11.21-c',SRV_NEED='9';
+/* Health of the phone-notification chain, read from the sheet script (ntfy enabled only). Problems are shown on the home screen. */
+let health={issues:[],bad:0,at:0};
+async function ntfyHealth(){
+  if(!S.settings.ntfy||!cfg.url)return null;
+  const x=await api('GET',{action:'nstatus',topic:S.settings.ntfy});
+  const now=Date.now(),ago=x.last?Math.round((now-x.last)/6e4):null,issues=[];
+  if(x.ver!==SRV_NEED)issues.push('הקוד בגיליון לא מעודכן (גרסה '+(x.ver||'ישנה')+', צריך '+SRV_NEED+')');
+  if(x.trigger===false||ago==null||ago>12)issues.push('השרת לא בודק'+(ago!=null?' כבר '+ago+' דק׳':'')+': צריך להריץ setupNotifications');
+  if(!x.token)issues.push('חסר טוקן של ntfy בגיליון');
+  if(x.topic===false)issues.push('שם הערוץ בגיליון שונה מהערוץ ביומן');
+  if(x.lastFail&&x.lastFail>(x.lastOk||0)&&now-x.lastFail<6*36e5)issues.push('ntfy דחתה הודעה'+(x.err?' ('+x.err+')':''));
+  if(x.tickErr)issues.push('שגיאה בשרת: '+x.tickErr);
+  return {x,issues,ago};
+}
+async function checkHealth(){
+  try{const h=await ntfyHealth();if(!h){health={issues:[],bad:0,at:Date.now()};return}
+    health={issues:h.issues,bad:h.issues.length?health.bad+1:0,at:Date.now()};if(tab==='home'&&!F)renderHome()}catch(e){/* offline or no answer: do not alarm */}
+}
+setInterval(checkHealth,10*6e4);setTimeout(checkHealth,6000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-health.at>3*6e4)checkHealth()});
 let preSeen='';
 function feedPreAlert(){
   const ls=leads(),every=+S.settings.feedEvery||0;if(!ls.length||!every||S.timers.feed)return;
@@ -886,14 +924,15 @@ function renderPrefs(){
    ${s.ntfy?`<p class="note" style="margin-top:0">פעיל. כל ההתראות מגיעות דרך אפליקציית ntfy, והיומן עצמו לא שולח התראות כשיוצאים ממנו.</p>
    <label class="f">שם הערוץ (מדביקים אותו באפליקציית ntfy)</label>
    <div class="row" style="flex-wrap:nowrap"><input class="in" readonly dir="ltr" value="${esc(s.ntfy)}" id="ntfyTopic"><button class="btn" type="button" id="ntfyCopy">העתקה</button></div>
-   <div class="row" style="margin-top:10px"><button class="btn pri" type="button" id="ntfyTest">שליחת התראת בדיקה</button><button class="btn" type="button" id="ntfyStatus">בדיקת השרת</button></div>
+   <div class="row" style="margin-top:10px"><button class="btn pri" type="button" id="ntfyTest">שליחת התראת בדיקה</button><button class="btn" type="button" id="ntfyStatus">בדיקת מערכת</button></div>
    <div class="note" id="ntfyMsg" style="margin-top:6px"></div>
    <details style="margin-top:8px"><summary class="note">איך מחברים (פעם אחת)</summary><ol class="note" style="padding-inline-start:18px;display:grid;gap:4px;margin:8px 0">
     <li>בכל טלפון: מתקינים את האפליקציה החינמית <b>ntfy</b> (App Store / Google Play) ומאשרים לה התראות.</li>
     <li>ב-ntfy לוחצים +, מדביקים את שם הערוץ שלמעלה ולוחצים Subscribe.</li>
     <li>כאן לוחצים "שליחת התראת בדיקה". אם ההתראה הגיעה, הטלפון מחובר.</li>
     <li>פעם אחת, מהמחשב, בגיליון: Extensions ← Apps Script, מוחקים את הקוד הישן ומדביקים את החדש <button class="btn small" type="button" id="syCode">העתקת הקוד</button> ושומרים. בוחרים למעלה <b>setupNotifications</b>, לוחצים Run ומאשרים. אחר כך Deploy ← Manage deployments ← ✏️ ← New version ← Deploy.</li>
-    <li>לוחצים "בדיקת השרת". כשכתוב שהשרת פעיל, ההתראות יגיעו גם כשהטלפון נעול והיומן סגור.</li>
+    <li>לוחצים "בדיקת מערכת". כשכל השורות מסומנות ✓, ההתראות יגיעו גם כשהטלפון נעול והיומן סגור. אם משהו מפסיק לעבוד, יופיע באנר אזהרה במסך הבית.</li>
+    <li>מומלץ: ב-Apps Script ← Triggers (⏰) ← עריכת הטריגר של notifyTick ← Failure notification settings ← Notify me immediately. ככה גוגל תשלח מייל אם השרת נכשל.</li>
     <li>חובה, פעם אחת: השרתים של גוגל משותפים להרבה משתמשים, ו-ntfy חוסם אותם כשעוברים מכסה יומית. לכן פותחים חשבון חינמי ב-ntfy.sh, יוצרים Access token, ובגיליון: Apps Script ← ⚙️ Project Settings ← Script Properties ← Add script property, בשם <b dir="ltr">NTFY_TOKEN</b> ובערך הטוקן ← Save. את הטוקן לא שולחים לאף אחד.</li></ol>
     <p class="note">מי שיודע את שם הערוץ יכול לקרוא את ההתראות, לכן הוא אקראי וארוך ואין בהתראות שמות.</p></details>
    <button class="btn small" type="button" id="ntfyOff" style="margin-top:8px">כיבוי</button>`
@@ -912,7 +951,7 @@ function renderPrefs(){
    <div class="row" style="flex-wrap:nowrap"><div style="flex:1"><label class="f" for="wStart">היום מתחיל ב-</label><input class="in" type="time" id="wStart" data-water="start" value="${esc(w.start)}"></div>
    <div style="flex:1"><label class="f" for="wEnd">ומסתיים ב-</label><input class="in" type="time" id="wEnd" data-water="end" value="${esc(w.end)}"></div></div>
    <p class="note">הקצב מחולק שווה על פני השעות האלה. למשל 8 בקבוקים בין 07:00 ל-22:00: בצהריים כדאי להיות בערך ב-2–3.</p></div>`;
-  h+=`<div class="card" data-cat="mom"><h2>תרופות ותוספים ל${esc(MOM())}</h2><p class="note" style="margin-top:0">כמה שעות צריך לחכות בין מנה למנה, לפי ההנחיה שקיבלתם. אחרי שנרשמת מנה, במסך הבית יופיע שעון שסופר עד שאפשר לקחת שוב. ריק = בלי שעון.</p>
+  h+=`<div class="card" data-cat="mom"><h2>תרופות ותוספים ל${esc(MOM())}</h2><p class="note" style="margin-top:0"><b>תזכורת בלבד:</b> לפי המרווחים שהגדרתם, לא ייעוץ רפואי. בכל ספק פנו לרופא או לרוקח. כמה שעות צריך לחכות בין מנה למנה, לפי ההנחיה שקיבלתם. אחרי שנרשמת מנה, במסך הבית יופיע שעון שסופר עד שאפשר לקחת שוב. ריק = בלי שעון.</p>
    ${momNames().map(n=>{const r=(s.daily||[]).find(x=>x.who==='mom'&&x.label===n);return `<div class="mrow"><b>${esc(n)}</b>
      ${PAIN.includes(n)?`<label>בין מנות <input class="in" type="number" inputmode="decimal" step="0.5" min="0" data-mgap="${esc(n)}" value="${momGap(n)||''}" placeholder="—" aria-label="שעות בין מנות של ${esc(n)}"> שעות</label>`:''}
      <label>תזכורת כל יום <input class="in" type="time" data-mrem="${esc(n)}" value="${r?esc(r.time):''}" aria-label="שעת תזכורת יומית ל${esc(n)}"></label>${r?`<button class="btn small" type="button" data-mremdel="${esc(n)}">בלי תזכורת</button>`:''}</div>`}).join('')}
@@ -945,6 +984,7 @@ function renderPrefs(){
   h+=`<div class="card" data-cat="backup"><h2>נמחקו לאחרונה</h2>${trash.length?`<ul class="list">${trash.slice(0,20).map(e=>`<li><span class="ic" style="background:var(--c-${T[e.type].c});color:var(--i-${T[e.type].c})">${IC[e.type]}</span><span class="main"><b>${T[e.type].l}</b><div>${new Date(e.t).toLocaleDateString('he-IL')} ${hm(e.t)} · ${esc(desc(e))}</div></span><button class="btn small" type="button" data-restore="${e.id}">שחזור</button></li>`).join('')}</ul>`:'<div class="empty">אין רישומים שנמחקו</div>'}</div>`;
   h+=`<div class="card" data-cat="backup"><h2>קבצי גיבוי</h2>
    <div class="row"><button class="btn" type="button" id="exCsv">טבלה (CSV) לאקסל / שיטס</button><button class="btn" type="button" id="exDl">גיבוי מלא כולל תמונות</button><button class="btn" type="button" id="exTsv">העתקה להדבקה בגיליון</button><label class="btn" for="imFile" style="display:inline-block">ייבוא גיבוי</label><input type="file" id="imFile" accept=".json,application/json" style="display:none"></div></div>`;
+  h+=`<p class="note" style="text-align:center">גרסת היומן ${APP_VER}</p>`;
   $('#v-prefs').innerHTML=h;
   document.querySelectorAll('#v-prefs .card[data-cat]').forEach(c=>c.hidden=c.dataset.cat!==cat);
 }
@@ -1282,7 +1322,7 @@ document.addEventListener('click',ev=>{
   if(d.phdel&&F){const tgt=F.edit||F.d;tgt.photos=(tgt.photos||[]).filter(x=>x!==d.phdel);const l=$('#phList');if(l)l.outerHTML=photoList(tgt.photos,true);return}
   if(d.restore){const e=findById(d.restore);if(e){putEvent({...e,del:false});toast('הרישום שוחזר')}return}
   if(d.open){openFlow(d.open);return}
-  if(d.goto){go(d.goto);return}
+  if(d.goto){if(d.goto==='prefs'&&d.pcat){localOnly.pcat=d.pcat;persistUI()}go(d.goto);return}
   if(d.share){openShare(d.share);return}
   if(d.snooze){localOnly.snooze=Date.now()+15*6e4;persistUI();renderAll();return}
   if(d.dismiss){localOnly.dismiss[d.dismiss]=dayKey(Date.now());persistUI();renderAll();return}
@@ -1310,9 +1350,17 @@ document.addEventListener('click',ev=>{
   if(el.id==='ntfyOff'){S.settings={...S.settings,ntfy:''};saveSettings();renderPrefs();return}
   if(el.id==='ntfyCopy'){copyText(S.settings.ntfy);return}
   if(el.id==='ntfyTest'){const m=$('#ntfyMsg');m.textContent='שולח…';fetch('https://ntfy.sh/',{method:'POST',body:JSON.stringify({topic:S.settings.ntfy,title:'בדיקה מיומן התינוקת',message:'אם רואים את זה, ההתראות מגיעות לטלפון 👍',tags:['baby_bottle'],priority:4})}).then(r=>{m.textContent=r.ok?'נשלחה. אם לא הגיעה תוך דקה, בדקו שנרשמתם לערוץ ב-ntfy ושההתראות שלה מאושרות.':'השליחה נכשלה ('+r.status+')'}).catch(()=>{m.textContent='השליחה נכשלה. בדקו חיבור לאינטרנט.'});return}
-  if(el.id==='ntfyStatus'){const m=$('#ntfyMsg');m.textContent='בודק…';api('GET',{action:'nstatus'}).then(x=>{const ago=x.last?Math.round((Date.now()-x.last)/6e4):null;
-    m.textContent=x.trigger!==false&&ago!=null&&ago<=3?'השרת פעיל ✓ (בדק לפני '+ago+' דק׳). ההתראות יגיעו גם כשהיומן סגור.':'הקוד בגיליון מעודכן, אבל ההתראות עוד לא הופעלו: צריך לבחור setupNotifications וללחוץ Run (שלב 4).'})
-    .catch(()=>{m.textContent='הגיליון לא מכיר את הבדיקה הזו: צריך לעדכן את הקוד בגיליון ולפרסם גרסה חדשה (שלב 4).'});return}
+  if(el.id==='ntfyStatus'){const m=$('#ntfyMsg');m.textContent='בודק…';
+    ntfyHealth().then(h=>{if(!h){m.textContent='צריך קודם להפעיל ערוץ ולחבר גיליון.';return}const x=h.x,L=[];
+      const ln=(ok,t)=>L.push((ok?'✓ ':'✗ ')+t);
+      ln(x.ver===SRV_NEED,'קוד השרת בגיליון: גרסה '+(x.ver||'ישנה')+(x.ver===SRV_NEED?'':' (צריך '+SRV_NEED+')'));
+      ln(x.trigger!==false&&h.ago!=null&&h.ago<=12,'השרת בודק כל דקה'+(h.ago!=null?' (בדק לפני '+h.ago+' דק׳)':''));
+      ln(!!x.token,'טוקן ntfy'+(x.token?' מוגדר':' חסר'));
+      ln(x.topic!==false,'הערוץ בגיליון זהה לערוץ ביומן');
+      ln(!(x.lastFail&&x.lastFail>(x.lastOk||0)),'הודעות התקבלו ב-ntfy ('+(x.sendOk||0)+' התקבלו, '+(x.sendFail||0)+' נדחו)'+(x.err&&x.lastFail>(x.lastOk||0)?': '+x.err:''));
+      ln(!x.tickErr,'אין שגיאות בשרת'+(x.tickErr?': '+x.tickErr:''));
+      m.innerHTML=L.map(esc).join('<br>')+'<br><br>באייפון, ודאו גם: הגדרות ← התראות ← ntfy ← מסך נעול ובאנרים מופעלים, ושמצב "לא להפריע" או Focus לא חוסם אותה.'+(x.runSec?'<br>זמן ריצה של השרת היום: '+Math.round(x.runSec/60)+' מתוך כ-90 דק׳ מותרות'+(x.skipped?' (השרת האט את הבדיקות כדי לא לחרוג)':''):'')})
+    .catch(()=>{m.textContent='לא הצלחתי להגיע לגיליון: בדקו חיבור לאינטרנט, או שהקוד בגיליון לא פורסם מחדש.'});return}
   if(d.pcat){localOnly.pcat=d.pcat;persistUI();renderPrefs();window.scrollTo(0,0);return}
   if(d.rnot){S.settings={...S.settings,daily:(S.settings.daily||[]).map(r=>r.id===d.rnot?{...r,notify:d.v==='1'}:r)};saveSettings();renderPrefs();return}
   if(d.awake){S.settings={...S.settings,keepAwake:d.awake==='1'};saveSettings();renderPrefs();return}

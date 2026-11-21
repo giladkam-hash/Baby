@@ -50,7 +50,12 @@ function doGet(e) {
     var sh = sheet_();
     var total = Math.max(0, sh.getLastRow() - 1);
     if (p.action === 'ping') return json_({ ok: true, total: total });
-    if (p.action === 'nstatus') return json_({ ok: true, total: total, last: +(PropertiesService.getScriptProperties().getProperty('nlast') || 0), trigger: hasTickTrigger_() });
+    if (p.action === 'nstatus') {
+      var PP = PropertiesService.getScriptProperties(), st0 = nget_('nstat', {}), set0 = nget_('nset', {}) || {}, run0 = nget_('nrun', {});
+      return json_({ ok: true, total: total, ver: NVER, last: +(PP.getProperty('nlast') || 0), trigger: hasTickTrigger_(), token: !!token_(),
+        topic: p.topic ? (String(p.topic) === set0.topic) : null, hasTopic: !!set0.topic, sendOk: st0.ok || 0, sendFail: st0.fail || 0,
+        lastOk: st0.lastOk || 0, lastFail: st0.lastFail || 0, err: st0.err || '', tickErr: st0.tickErr || '', runSec: Math.round((run0.ms || 0) / 1000), skipped: run0.skipped || 0 });
+    }
     var since = Math.max(0, parseInt(p.since || '0', 10) || 0);
     if (since >= total) return json_({ ok: true, total: total, rows: [] });
     var vals = sh.getRange(2 + since, HEAD.length, total - since, 1).getValues();
@@ -65,7 +70,6 @@ function doPost(e) {
   lock.waitLock(25000);
   try {
     var b = JSON.parse(e.postData.contents);
-    if (b.action === 'snooze' || b.action === 'done') { nAction_(b); return json_({ ok: true }); }
     if (b.action === 'append') {
       var sh = sheet_();
       var rows = (b.rows || []).map(function (r) {
@@ -73,6 +77,13 @@ function doPost(e) {
         while (row.length < HEAD.length) row.push('');
         return row.map(function (c) { return c === null || c === undefined ? '' : c; });
       });
+      var lr0 = sh.getLastRow();
+      if (rows.length && lr0 > 1) {
+        // the same update sometimes arrives twice (a sync that ran twice); skip rows already stored in the last 400 rows
+        var seen = {}, from0 = Math.max(2, lr0 - 399), prev = sh.getRange(from0, 1, lr0 - from0 + 1, 2).getValues();
+        prev.forEach(function (r) { seen[String(r[0]) + '|' + String(r[1])] = 1; });
+        rows = rows.filter(function (r) { var k = String(r[0]) + '|' + String(r[1]); if (seen[k]) return false; seen[k] = 1; return true; });
+      }
       if (rows.length) {
         var start = sh.getLastRow() + 1;
         // keep the JSON column as plain text so Sheets never reformats it
@@ -139,7 +150,7 @@ function rebuildClean() { rebuildClean_(sheet_()); }
  * (approve the permissions), then Deploy ← Manage deployments ← edit ← New version.
  * A trigger then runs notifyTick every minute. It reads only a small saved summary, not the sheet. */
 var NTFY = 'https://ntfy.sh/';
-var NVER = '8';
+var NVER = '9';
 /* the ntfy token: the script property NTFY_TOKEN, or any script property whose value looks like a token (tk_...) */
 function token_() {
   var all = PropertiesService.getScriptProperties().getProperties(), t = all.NTFY_TOKEN || '';
@@ -147,7 +158,8 @@ function token_() {
   return String(t || '').trim();
 }
 var DIAG_TAB = 'מצב התראות';
-var nlog_ = []; // bump when the saved summary needs new fields; the next tick rebuilds it from the sheet
+var nlog_ = [];
+var nstat_ = {}; // bump when the saved summary needs new fields; the next tick rebuilds it from the sheet
 
 function setupNotifications() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'notifyTick') ScriptApp.deleteTrigger(t); });
@@ -162,21 +174,36 @@ function hasTickTrigger_() {
 function nget_(k, d) { try { var v = PropertiesService.getScriptProperties().getProperty(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function nput_(k, v) { PropertiesService.getScriptProperties().setProperty(k, JSON.stringify(v)); }
 
+/* Settings from two phones are merged per field: each field carries the time it was last changed (d.fu[field]);
+ * older versions of the app send whole objects without it, which are then treated as changed as a whole. */
+function mergeSetRaw_(cur, d, u) {
+  var out = {}, fu = {}, cfu = cur.fu || {}, hasC = cur.fu && Object.keys(cur.fu).length > 0, dfu = d.fu;
+  var keys = {}; Object.keys(cur).forEach(function (k) { keys[k] = 1; }); Object.keys(d).forEach(function (k) { keys[k] = 1; });
+  Object.keys(keys).forEach(function (k) {
+    if (k === 'fu' || k === 'u') return;
+    var lt = hasC ? (cfu[k] || 0) : (cur.u || 0), rt = dfu ? (dfu[k] || 0) : u, takeRemote = (k in d) && (!(k in cur) || rt > lt);
+    out[k] = takeRemote ? d[k] : cur[k]; fu[k] = takeRemote ? rt : lt;
+  });
+  out.fu = fu; out.u = Math.max(cur.u || 0, u);
+  return out;
+}
+function deriveSet_(d) {
+  return { u: d.u, every: +d.feedEvery || 0, leads: (Array.isArray(d.notifyLeads) ? d.notifyLeads : [d.notifyLead == null ? 10 : d.notifyLead]).map(Number).filter(function (v) { return v > 0; }), end: d.notifyEnd !== false, due: d.notifyDue !== false, water: d.notifyWater !== false,
+    pain: d.notifyPain === true, gap: d.momGap || {}, app: d.appUrl || '', meds: d.notifyMeds !== false,
+    topic: d.ntfy || '', tz: d.tz || 'Asia/Jerusalem', w: d.water || {},
+    merge: d.mergeMin == null ? 40 : +d.mergeMin, imm: d.notifyImmMin == null ? 30 : +d.notifyImmMin,
+    wait: +d.notifyWaitMin > 0 ? +d.notifyWaitMin : (+d.autoWaitMin > 0 ? +d.autoWaitMin : 10),
+    daily: (d.daily || []).filter(function (x) { return x.notify !== false; }).map(function (x) { return { id: x.id, l: x.label, t: x.time, m: x.who === 'mom' ? 1 : 0 }; }) };
+}
 /* keeps: latest settings, whether a feeding timer runs, and the last ~2 days of feeds / water / medicine */
 function ingest_(jsons) {
-  var set = nget_('nset', {}), ev = nget_('nev', {}), tim = nget_('ntim', { u: 0, feed: false }), now = Date.now(), changed = false;
+  var set = nget_('nset', {}), raw = nget_('nraw', { fu: {}, u: 0 }), ev = nget_('nev', {}), tim = nget_('ntim', { u: 0, feed: false }), now = Date.now(), changed = false;
   jsons.forEach(function (j) {
     var r; try { r = JSON.parse(j); } catch (e) { return; }
     if (!r || !r.d) return;
     var u = r.u || 0, d = r.d;
-    if (r.k === 'set' && u >= (set.u || 0)) {
-      set = { u: u, every: +d.feedEvery || 0, leads: (Array.isArray(d.notifyLeads) ? d.notifyLeads : [d.notifyLead == null ? 10 : d.notifyLead]).map(Number).filter(function (v) { return v > 0; }), end: d.notifyEnd !== false, due: d.notifyDue !== false, water: d.notifyWater !== false,
-        pain: d.notifyPain === true, gap: d.momGap || {}, app: d.appUrl || '', meds: d.notifyMeds !== false,
-        topic: d.ntfy || '', tz: d.tz || 'Asia/Jerusalem', w: d.water || {},
-        merge: d.mergeMin == null ? 40 : +d.mergeMin, imm: d.notifyImmMin == null ? 30 : +d.notifyImmMin,
-        wait: +d.notifyWaitMin > 0 ? +d.notifyWaitMin : (+d.autoWaitMin > 0 ? +d.autoWaitMin : 10),
-        daily: (d.daily || []).filter(function (x) { return x.notify !== false; }).map(function (x) { return { id: x.id, l: x.label, t: x.time, m: x.who === 'mom' ? 1 : 0 }; }) };
-      changed = true;
+    if (r.k === 'set') {
+      raw = mergeSetRaw_(raw, d, u); set = deriveSet_(raw); changed = true;
     } else if (r.k === 'tim' && u >= (tim.u || 0)) { tim = { u: u, feed: !!d.feed }; changed = true; }
     else if (r.k === 'ev' && /^(feed|bottle|water|med|mmed)$/.test(d.type) && d.t > now - 2 * 864e5) {
       var cur = ev[d.id];
@@ -188,11 +215,11 @@ function ingest_(jsons) {
   });
   if (!changed) return;
   Object.keys(ev).forEach(function (id) { if (ev[id].t < now - 2 * 864e5) delete ev[id]; });
-  nput_('nset', set); nput_('nev', ev); nput_('ntim', tim);
+  nput_('nset', set); nput_('nraw', raw); nput_('nev', ev); nput_('ntim', tim);
 }
 function rebuildNotifyState_() {
   var sh = sheet_(), n = sh.getLastRow() - 1;
-  ['nset', 'nev', 'ntim'].forEach(function (k) { PropertiesService.getScriptProperties().deleteProperty(k); });
+  ['nset', 'nraw', 'nev', 'ntim'].forEach(function (k) { PropertiesService.getScriptProperties().deleteProperty(k); });
   if (n < 1) return;
   var from = Math.max(2, n - 1500 + 2);
   var vals = sh.getRange(from, HEAD.length, sh.getLastRow() - from + 1, 1).getValues();
@@ -202,79 +229,75 @@ function rebuildNotifyState_() {
 /* reads rows added since the last tick, so notifications don't depend on which web-app version is deployed */
 function catchUp_() {
   var P = PropertiesService.getScriptProperties(), sh = sheet_(), lr = sh.getLastRow(), done = +(P.getProperty('nrow') || 0);
-  if (lr <= done) return 0;
+  if (lr < done) { rebuildNotifyState_(); return 0; }
+  if (lr === done) return 0;
   var from = Math.max(2, done + 1), vals = sh.getRange(from, HEAD.length, lr - from + 1, 1).getValues();
   ingest_(vals.map(function (r) { return String(r[0] || ''); }));
   P.setProperty('nrow', String(lr));
   return lr - from + 1;
 }
-/* btns: [[label, {action:'snooze'|'done', ...}], ...] become buttons on the notification that call this script */
-function send_(topic, title, message, prio, tags, btns, click) {
-  if (!topic) return;
-  var msg = { topic: topic, title: title, message: message, priority: prio || 3, tags: tags || [] }, url = '';
-  try { url = ScriptApp.getService().getUrl() || ''; } catch (e) {}
+/* Sends one notification. seq (optional) lets a newer notification replace the previous one with the same id. */
+function send_(topic, title, message, prio, tags, btns, click, seq) {
+  if (!topic) return false;
+  var msg = { topic: topic, title: title, message: message, priority: prio || 3, tags: tags || [] };
   if (click) msg.click = click;
-  // no action buttons: the ntfy iPhone app does not show notifications that carry them (seen on 21.11).
-  // Tapping the notification opens the journal, where the banners have the same buttons.
-  var code = 0, body = '';
+  if (seq) msg.sequence_id = seq;
   // Google's servers share IP addresses, and ntfy.sh limits anonymous senders per IP. A free ntfy.sh access token,
-  // saved as the script property NTFY_TOKEN (Project Settings ← Script Properties), gives this script its own quota.
+  // saved as a script property (NTFY_TOKEN), gives this script its own quota.
   var tok = token_(), hdr = tok ? { Authorization: 'Bearer ' + tok } : {};
+  var code = 0, body = '';
   try { var res = UrlFetchApp.fetch(NTFY, { method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: hdr, payload: JSON.stringify(msg) });
     code = res.getResponseCode(); body = code === 200 ? '' : String(res.getContentText()).slice(0, 160); } catch (e) { body = String(e).slice(0, 160); }
   nlog_.push(title + ' → ' + code + (body ? ' ' + body : ''));
-  return code >= 200 && code < 300;
-}
-/* "snooze": forget that a reminder was sent, and stay quiet for N minutes; "done": log it in the sheet like the app does */
-function nAction_(b) {
-  var set = nget_('nset', {}), now = Date.now();
-  if (b.action === 'snooze') {
-    var sent = nget_('nsent', {}), snz = nget_('nsnz', {});
-    Object.keys(sent).forEach(function (k) { if (k.indexOf(b.key) === 0) delete sent[k]; });
-    snz[b.key] = now + (+b.min || 30) * 6e4;
-    nput_('nsent', sent); nput_('nsnz', snz);
-    return;
-  }
-  if (b.action === 'done') {
-    var tz = set.tz || 'Asia/Jerusalem', id = 'n' + now.toString(36) + Math.random().toString(36).slice(2, 6), t = new Date(now);
-    var d = b.kind === 'water' ? { id: id, type: 'water', n: 1, t: now } : { id: id, type: b.kind === 'mmed' ? 'mmed' : 'med', name: String(b.name || ''), t: now };
-    var label = d.type === 'water' ? 'מים לאמא' : d.type === 'mmed' ? 'תרופה לאמא' : 'ויטמין / תרופה';
-    var row = [id, Utilities.formatDate(t, tz, 'd.M.yyyy, HH:mm:ss'), 'פעיל', Utilities.formatDate(t, tz, 'd.M.yyyy'), Utilities.formatDate(t, tz, 'HH:mm'), label, '', '', '', '', '', '', '',
-      d.type === 'water' ? 'בקבוק' : d.name, '', 'נרשם מההתראה', '', JSON.stringify({ k: 'ev', id: id, u: now, d: d })];
-    var sh = sheet_(), start = sh.getLastRow() + 1;
-    sh.getRange(start, HEAD.length, 1, 1).setNumberFormat('@');
-    sh.getRange(start, 1, 1, HEAD.length).setValues([row]);
-    try { rebuildClean_(sh); } catch (e) {}
-    ingest_([row[HEAD.length - 1]]);
-    send_(set.topic, 'נרשם ✓', d.type === 'water' ? 'בקבוק מים' : d.name, 1, ['white_check_mark']);
-  }
+  var ok = code >= 200 && code < 300;
+  nstat_[ok ? 'ok' : 'fail'] = (nstat_[ok ? 'ok' : 'fail'] || 0) + 1;
+  nstat_[ok ? 'lastOk' : 'lastFail'] = Date.now();
+  if (!ok) nstat_.err = (code + ' ' + body).slice(0, 120);
+  return ok;
 }
 function mins_(hhmm) { var a = String(hhmm || '00:00').split(':'); return (+a[0] || 0) * 60 + (+a[1] || 0); }
 
+/* Apps Script gives a consumer account about 90 minutes of trigger runtime per day. We measure our own use and,
+ * if it passes 60 minutes, run only every 5th minute so the quota is never exhausted (notifications stay on time ±5 min). */
 function notifyTick() {
-  var P = PropertiesService.getScriptProperties();
-  P.setProperty('nlast', String(Date.now()));
-  nlog_ = [];
+  var t0 = Date.now(), P = PropertiesService.getScriptProperties(), set0 = nget_('nset', {}) || {}, tz = set0.tz || 'Asia/Jerusalem';
+  var day = Utilities.formatDate(new Date(t0), tz, 'yyyy-MM-dd'), run = nget_('nrun', { day: day, ms: 0, n: 0 });
+  if (run.day !== day) run = { day: day, ms: 0, n: 0 };
+  var throttled = run.ms > 60 * 6e4 && new Date(t0).getMinutes() % 5 !== 0;
+  P.setProperty('nlast', String(t0));
+  if (throttled) { run.skipped = (run.skipped || 0) + 1; nput_('nrun', run); return; }
+  nlog_ = []; nstat_ = nget_('nstat', {});
   var err = '';
   try {
     if (P.getProperty('nver') !== NVER) { rebuildNotifyState_(); var st = nget_('nsent', {}); Object.keys(st).forEach(function (k) { if (k.charAt(0) === 'e') delete st[k]; }); nput_('nsent', st); P.setProperty('nver', NVER); } else catchUp_();
     tick_();
-  } catch (e) { err = String(e && e.stack || e).slice(0, 300); }
-  try { diag_(err); } catch (e) {}
+  } catch (e) { err = String(e && e.stack || e).slice(0, 300); nstat_.tickErr = err.slice(0, 120); nstat_.tickErrAt = Date.now(); }
+  if (!err) { nstat_.tickErr = ''; }
+  nput_('nstat', nstat_);
+  run.ms += Date.now() - t0; run.n = (run.n || 0) + 1; nput_('nrun', run);
+  try { diag_(err, run); } catch (e) {}
 }
-function diag_(err) {
+/* the status tab is rewritten only when something changed (or every 10 minutes), not every minute */
+function diag_(err, run) {
+  var P = PropertiesService.getScriptProperties();
   var set = nget_('nset', {}) || {}, ev = nget_('nev', {}), tim = nget_('ntim', {}), tz = set.tz || 'Asia/Jerusalem', now = new Date();
   var f = Object.keys(ev).map(function (k) { return ev[k]; }).filter(function (e) { return !e.x && (e.y === 'feed' || e.y === 'bottle'); }).sort(function (a, b) { return b.e - a.e; })[0];
   var t = function (ms) { return ms ? Utilities.formatDate(new Date(ms), tz, 'dd.MM HH:mm') : '—'; };
-  var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(DIAG_TAB) || ss.insertSheet(DIAG_TAB);
   var log = (nget_('nlog', []) || []).concat(nlog_.map(function (l) { return Utilities.formatDate(now, tz, 'dd.MM HH:mm') + '  ' + l; })).slice(-15);
   nput_('nlog', log);
-  var rows = [['בדיקה אחרונה', Utilities.formatDate(now, tz, 'dd.MM HH:mm:ss')], ['גרסת קוד', NVER], ['ערוץ מוגדר', set.topic ? 'כן' : 'לא'], ['טוקן ntfy', token_() ? 'מוגדר (' + token_().slice(0, 5) + '…)' : 'חסר'],
-    ['שמות בהגדרות הסקריפט', Object.keys(PropertiesService.getScriptProperties().getProperties()).filter(function (k) { return !/^n(set|ev|tim|sent|snz|log|last|ver|row)$/.test(k); }).map(function (k) { return /^tk_/.test(k) ? 'tk_…' : k; }).join(', ') || '—'],
+  var st = nstat_ || {};
+  var rows = [['גרסת קוד', NVER], ['ערוץ מוגדר', set.topic ? 'כן' : 'לא'], ['טוקן ntfy', token_() ? 'מוגדר (' + token_().slice(0, 5) + '…)' : 'חסר'],
     ['הנקה אחרונה הסתיימה', f ? t(f.e) : '—'], ['צד אחרון', f && f.s ? f.s : '—'], ['הנקה הבאה', f && set.every ? t(f.e + set.every * 36e5) : '—'],
-    ['טיימר הנקה פעיל', tim.feed ? 'כן' : 'לא'], ['שולח מיד מעל (דק׳ נטו)', set.imm == null ? '30' : String(set.imm)], ['המתנה אחרי הנקה קצרה (דק׳)', String(set.wait || 10)], ['התראה לפני (דק׳)', (set.leads || []).join(', ') || '—'], ['שורות שנקראו', PropertiesService.getScriptProperties().getProperty('nrow') || '0'],
+    ['טיימר הנקה פעיל', tim.feed ? 'כן' : 'לא'], ['שולח מיד מעל (דק׳ נטו)', set.imm == null ? '30' : String(set.imm)], ['המתנה אחרי הנקה קצרה (דק׳)', String(set.wait || 10)], ['התראה לפני (דק׳)', (set.leads || []).join(', ') || '—'],
+    ['שורות שנקראו', P.getProperty('nrow') || '0'], ['התראות שהתקבלו / נדחו (מצטבר)', (st.ok || 0) + ' / ' + (st.fail || 0)],
+    ['זמן ריצה היום (שניות) / ריצות', Math.round((run.ms || 0) / 1000) + ' / ' + (run.n || 0) + (run.skipped ? ' (דולגו ' + run.skipped + ')' : '')],
     ['שגיאה', err || '—'], ['', ''], ['התראות אחרונות (קוד 200 = התקבלה ב-ntfy)', '']].concat(log.slice().reverse().map(function (l) { return [l, '']; }));
+  var sig = JSON.stringify(rows.filter(function (r) { return String(r[0]).indexOf('זמן ריצה') !== 0; })), changed = sig !== P.getProperty('ndiagh'), stale = !P.getProperty('ndiagt') || Date.now() - +P.getProperty('ndiagt') > 10 * 6e4;
+  if (!changed && !stale) return;
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(DIAG_TAB) || ss.insertSheet(DIAG_TAB);
+  rows.unshift(['עודכן (הלשונית מתעדכנת כשיש שינוי ולכל היותר כל 10 דק׳)', Utilities.formatDate(now, tz, 'dd.MM HH:mm:ss')]);
   sh.clearContents(); sh.getRange(1, 1, rows.length, 2).setValues(rows);
+  P.setProperty('ndiagh', sig); P.setProperty('ndiagt', String(Date.now()));
 }
 function tick_() {
   var P = PropertiesService.getScriptProperties();
@@ -306,7 +329,7 @@ function tick_() {
     var start = end + (net >= (set.imm || 30) ? 0 : (set.wait || 10) * 6e4);
     var slot = Math.floor((now - start) / (30 * 6e4));
     if (set.end && now >= start && (due ? now < due - 2 * 6e4 : slot === 0)) once('e' + NVER + ':' + end + ':' + slot, function () {
-      return send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), [due ? 'הבאה ב-' + hm(due) : '', nextSide ? 'צד הבא: ' + nextSide : ''].filter(String).join(' · ') || 'נרשם ביומן', 4, ['baby_bottle'], null, app); });
+      return send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), [due ? 'הבאה ב-' + hm(due) : '', nextSide ? 'צד הבא: ' + nextSide : ''].filter(String).join(' · ') || 'נרשם ביומן', 4, ['baby_bottle'], null, app, 'feed-status'); });
     // several "minutes before" alerts; if more than one is already due (e.g. phone was offline), send only the closest one
     var hitL = (set.leads || []).filter(function (l) { return now >= due - l * 6e4; }).sort(function (a, b) { return a - b; });
     if (due && hitL.length && now < due) {
@@ -316,14 +339,13 @@ function tick_() {
           return send_(set.topic, 'הנקה בעוד ' + Math.max(1, Math.round((due - now) / 6e4)) + ' דק׳', 'הבאה ב-' + hm(due) + (nextSide ? ' · צד הבא: ' + nextSide : '') + ' · האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle', 'alarm_clock'], null, app); }); }
     }
     if (due && set.due && now >= due && now < due + 3 * 36e5) once('d' + end, function () {
-      return send_(set.topic, 'הגיע הזמן להנקה', (nextSide ? 'צד הבא: ' + nextSide + ' · ' : '') + 'האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle'], [['עוד 15 דק׳', { action: 'snooze', key: 'd' + end, min: 15 }]], app); });
+      return send_(set.topic, 'הגיע הזמן להנקה', (nextSide ? 'צד הבא: ' + nextSide + ' · ' : '') + 'האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle'], null, app, 'feed-status'); });
   }
   // daily vitamins / medicine, once a day each, until 3 hours after the set time
   if (set.meds) (set.daily || []).forEach(function (r) {
     var tm = mins_(r.t), key = 'r' + r.id + day; if (nowM < tm || (nowM > tm + 180 && !snz[key])) return;
     var given = today.some(function (e) { return e.y === (r.m ? 'mmed' : 'med') && e.n === r.l; });
-    if (!given) once(key, function () { return send_(set.topic, '💊 ' + r.l + (r.m ? ' לאמא' : ' לתינוקת'), 'תזכורת יומית · ' + r.t, 4, ['pill'],
-      [[r.m ? 'נלקח ✓' : 'ניתן ✓', { action: 'done', kind: r.m ? 'mmed' : 'med', name: r.l }], ['עוד 30 דק׳', { action: 'snooze', key: key, min: 30 }]], app); });
+    if (!given) once(key, function () { return send_(set.topic, '💊 ' + r.l + (r.m ? ' לאמא' : ' לתינוקת'), 'תזכורת יומית · ' + r.t, 4, ['pill'], null, app); });
   });
   // mother's painkiller: when the next dose is allowed (only if chosen and an interval was set)
   if (set.pain) Object.keys(set.gap || {}).forEach(function (n) {
@@ -338,8 +360,7 @@ function tick_() {
     var a = mins_(w.start || '07:00'), b = mins_(w.end || '22:00'); if (b <= a) b = a + 16 * 60;
     if (nowM >= a + 60 && nowM <= b) {
       var exp = Math.floor(goal * (nowM - a) / (b - a) + 1e-9), cnt = today.filter(function (e) { return e.y === 'water'; }).reduce(function (s, e) { return s + (e.c || 1); }, 0);
-      if (exp - cnt >= 1) once('w' + day + ':' + exp, function () { return send_(set.topic, '💧 הגיע הזמן לבקבוק מים', 'שתית ' + cnt + ' מתוך ' + goal + '. לפי השעה כדאי להיות ב-' + exp + '.', 4, ['droplet'],
-        [['+ בקבוק', { action: 'done', kind: 'water' }], ['עוד שעה', { action: 'snooze', key: 'w' + day, min: 60 }]], app); });
+      if (exp - cnt >= 1) once('w' + day + ':' + exp, function () { return send_(set.topic, '💧 הגיע הזמן לבקבוק מים', 'שתית ' + cnt + ' מתוך ' + goal + '. לפי השעה כדאי להיות ב-' + exp + '.', 4, ['droplet'], null, app); });
     }
   }
   Object.keys(sent).forEach(function (k) { if (sent[k] < now - 3 * 864e5) delete sent[k]; });
