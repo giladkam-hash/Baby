@@ -716,7 +716,7 @@ function sysNotify(body,kind){
   if(kind&&S.settings[kind]===false)return;
   try{if('Notification' in window&&Notification.permission==='granted')new Notification('יומן התינוקת',{body})}catch(e){}
 }
-const APP_VER='2026.11.21-c',SRV_NEED='9';
+const APP_VER='2026.11.21-c',SRV_NEED='10';
 /* Health of the phone-notification chain, read from the sheet script (ntfy enabled only). Problems are shown on the home screen. */
 let health={issues:[],bad:0,at:0};
 async function ntfyHealth(){
@@ -729,6 +729,8 @@ async function ntfyHealth(){
   if(x.topic===false)issues.push('שם הערוץ בגיליון שונה מהערוץ ביומן');
   if(x.lastFail&&x.lastFail>(x.lastOk||0)&&now-x.lastFail<6*36e5)issues.push('ntfy דחתה הודעה'+(x.err?' ('+x.err+')':''));
   if(x.tickErr)issues.push('שגיאה בשרת: '+x.tickErr);
+  if(x.acct&&x.acct.code===401)issues.push('הטוקן של ntfy לא תקין');
+  else if(x.acct&&x.acct.code===200&&x.acct.role==='anonymous'&&x.token)issues.push('ntfy לא מזהה את הטוקן (הבקשות נספרות כאנונימיות)');
   return {x,issues,ago};
 }
 async function checkHealth(){
@@ -1357,6 +1359,7 @@ document.addEventListener('click',ev=>{
       ln(x.trigger!==false&&h.ago!=null&&h.ago<=12,'השרת בודק כל דקה'+(h.ago!=null?' (בדק לפני '+h.ago+' דק׳)':''));
       ln(!!x.token,'טוקן ntfy'+(x.token?' מוגדר':' חסר'));
       ln(x.topic!==false,'הערוץ בגיליון זהה לערוץ ביומן');
+      ln(!x.acct||(x.acct.code===200&&x.acct.role!=='anonymous'),'חשבון ntfy: '+(x.acctText||'לא נבדק עדיין'));
       ln(!(x.lastFail&&x.lastFail>(x.lastOk||0)),'הודעות התקבלו ב-ntfy ('+(x.sendOk||0)+' התקבלו, '+(x.sendFail||0)+' נדחו)'+(x.err&&x.lastFail>(x.lastOk||0)?': '+x.err:''));
       ln(!x.tickErr,'אין שגיאות בשרת'+(x.tickErr?': '+x.tickErr:''));
       m.innerHTML=L.map(esc).join('<br>')+'<br><br>באייפון, ודאו גם: הגדרות ← התראות ← ntfy ← מסך נעול ובאנרים מופעלים, ושמצב "לא להפריע" או Focus לא חוסם אותה.'+(x.runSec?'<br>זמן ריצה של השרת היום: '+Math.round(x.runSec/60)+' מתוך כ-90 דק׳ מותרות'+(x.skipped?' (השרת האט את הבדיקות כדי לא לחרוג)':''):'')})

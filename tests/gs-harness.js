@@ -17,7 +17,7 @@ function makeEnv(opts = {}) {
     ContentService: { createTextOutput: t => ({ setMimeType() { return t; } }), MimeType: { JSON: 1 } },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => env.props[k] ?? null, setProperty: (k, v) => { if (String(v).length > 9000) throw new Error('property too big: ' + k); env.props[k] = String(v); }, deleteProperty: k => delete env.props[k], getProperties: () => ({ ...env.props }) }) },
     ScriptApp: { getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/TEST/exec' }), getProjectTriggers: () => env.triggers, deleteTrigger() {}, newTrigger: h => ({ timeBased: () => ({ everyMinutes: () => ({ create() { env.triggers.push({ getHandlerFunction: () => h }); } }) }) }) },
-    UrlFetchApp: { fetch: (u, o) => { const msg = JSON.parse(o.payload); const code = typeof env.status === 'function' ? env.status(msg) : env.status; if (code === 200) env.sent.push(msg); return { getResponseCode: () => code, getContentText: () => '{"error":"x"}' }; } },
+    UrlFetchApp: { fetch: (u, o) => { if (String(u).includes('/v1/account')) { env.accountCalls = (env.accountCalls || 0) + 1; const acc = env.account || { code: 200, body: { role: 'user', username: 'tester', limits: { basis: 'user', messages: 250 }, stats: { messages: 4, messages_remaining: 246 }, tier: { code: 'free' } } }; return { getResponseCode: () => acc.code, getContentText: () => JSON.stringify(acc.body || {}) }; } const msg = JSON.parse(o.payload); const code = typeof env.status === 'function' ? env.status(msg) : env.status; if (code === 200) env.sent.push(msg); return { getResponseCode: () => code, getContentText: () => '{"error":"x"}' }; } },
     Utilities: { formatDate: fmt, base64Encode() { return ''; } },
     DriveApp: {},
   };

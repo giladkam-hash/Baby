@@ -54,4 +54,9 @@ test('status fields the app needs are served', () => {
 test('own runtime is measured and the status tab is not rewritten every minute', () => {
   const e = fresh(), T0 = e.now; run(e, 0, 5, T0); const run0 = JSON.parse(e.props.nrun); assert.strictEqual(run0.n, 6); const writes = e.props.ndiagt; run(e, 6, 8, T0); assert.strictEqual(e.props.ndiagt, writes);
 });
+test('ntfy account is probed (cached), reported to the app, and refreshed after a rejected send', () => {
+  const e = fresh(), T0 = e.now; run(e, 0, 3, T0); assert.strictEqual(e.accountCalls, 1);
+  let st = JSON.parse(e.api.doGet({ parameter: { action: 'nstatus' } })); assert.strictEqual(st.acct.role, 'user'); assert.ok(st.acctText.includes('נוצלו 4 מתוך 250'));
+  e.status = 429; e.account = { code: 401, body: { error: 'unauthorized' } }; e.feed('a', 'L', -37, 3, 40, T0); run(e, 4, 6, T0, {}); st = JSON.parse(e.api.doGet({ parameter: { action: 'nstatus' } })); assert.strictEqual(st.acct.code, 401); assert.ok(st.acctText.includes('לא תקין'));
+});
 console.log(`\n${passed} passed`);

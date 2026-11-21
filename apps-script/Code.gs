@@ -54,7 +54,7 @@ function doGet(e) {
       var PP = PropertiesService.getScriptProperties(), st0 = nget_('nstat', {}), set0 = nget_('nset', {}) || {}, run0 = nget_('nrun', {});
       return json_({ ok: true, total: total, ver: NVER, last: +(PP.getProperty('nlast') || 0), trigger: hasTickTrigger_(), token: !!token_(),
         topic: p.topic ? (String(p.topic) === set0.topic) : null, hasTopic: !!set0.topic, sendOk: st0.ok || 0, sendFail: st0.fail || 0,
-        lastOk: st0.lastOk || 0, lastFail: st0.lastFail || 0, err: st0.err || '', tickErr: st0.tickErr || '', runSec: Math.round((run0.ms || 0) / 1000), skipped: run0.skipped || 0 });
+        lastOk: st0.lastOk || 0, lastFail: st0.lastFail || 0, err: st0.err || '', tickErr: st0.tickErr || '', runSec: Math.round((run0.ms || 0) / 1000), skipped: run0.skipped || 0, acct: st0.acct || null, acctText: acctText_(st0.acct) });
     }
     var since = Math.max(0, parseInt(p.since || '0', 10) || 0);
     if (since >= total) return json_({ ok: true, total: total, rows: [] });
@@ -150,7 +150,7 @@ function rebuildClean() { rebuildClean_(sheet_()); }
  * (approve the permissions), then Deploy ← Manage deployments ← edit ← New version.
  * A trigger then runs notifyTick every minute. It reads only a small saved summary, not the sheet. */
 var NTFY = 'https://ntfy.sh/';
-var NVER = '9';
+var NVER = '10';
 /* the ntfy token: the script property NTFY_TOKEN, or any script property whose value looks like a token (tk_...) */
 function token_() {
   var all = PropertiesService.getScriptProperties().getProperties(), t = all.NTFY_TOKEN || '';
@@ -236,6 +236,24 @@ function catchUp_() {
   P.setProperty('nrow', String(lr));
   return lr - from + 1;
 }
+/* Asks ntfy who it thinks we are (user vs anonymous), and how much of the daily quota is used. Cached 30 minutes, or refreshed after a rejected send. */
+function acct_(force) {
+  var a = nstat_.acct, now = Date.now();
+  if (a && !force && now - a.t < 30 * 6e4) return a;
+  var tok = token_(), out = { t: now, auth: !!tok };
+  try {
+    var res = UrlFetchApp.fetch(NTFY + 'v1/account', { muteHttpExceptions: true, headers: tok ? { Authorization: 'Bearer ' + tok } : {} });
+    out.code = res.getResponseCode();
+    if (out.code === 200) { var j = JSON.parse(res.getContentText()); out.role = j.role; out.user = j.username; out.basis = j.limits && j.limits.basis; out.limit = j.limits && j.limits.messages; out.used = j.stats && j.stats.messages; out.left = j.stats && j.stats.messages_remaining; out.tier = j.tier && j.tier.code; }
+  } catch (e) { out.code = 0; out.err = String(e).slice(0, 80); }
+  nstat_.acct = out; return out;
+}
+function acctText_(a) {
+  if (!a) return '—';
+  if (a.code === 401) return 'הטוקן לא תקין (401)';
+  if (a.code !== 200) return 'לא נבדק (' + a.code + ')';
+  return (a.role === 'anonymous' ? 'אנונימי לפי IP (הטוקן לא בשימוש!)' : 'משתמש ' + a.user + (a.tier ? ' · ' + a.tier : '')) + ' · נוצלו ' + a.used + ' מתוך ' + a.limit + ' (' + a.basis + ')';
+}
 /* Sends one notification. seq (optional) lets a newer notification replace the previous one with the same id. */
 function send_(topic, title, message, prio, tags, btns, click, seq) {
   if (!topic) return false;
@@ -252,7 +270,7 @@ function send_(topic, title, message, prio, tags, btns, click, seq) {
   var ok = code >= 200 && code < 300;
   nstat_[ok ? 'ok' : 'fail'] = (nstat_[ok ? 'ok' : 'fail'] || 0) + 1;
   nstat_[ok ? 'lastOk' : 'lastFail'] = Date.now();
-  if (!ok) nstat_.err = (code + ' ' + body).slice(0, 120);
+  if (!ok) { nstat_.err = (code + ' ' + body).slice(0, 120); if (!nstat_.probedThisTick) { nstat_.probedThisTick = 1; try { acct_(true); } catch (e) {} } }
   return ok;
 }
 function mins_(hhmm) { var a = String(hhmm || '00:00').split(':'); return (+a[0] || 0) * 60 + (+a[1] || 0); }
@@ -266,11 +284,12 @@ function notifyTick() {
   var throttled = run.ms > 60 * 6e4 && new Date(t0).getMinutes() % 5 !== 0;
   P.setProperty('nlast', String(t0));
   if (throttled) { run.skipped = (run.skipped || 0) + 1; nput_('nrun', run); return; }
-  nlog_ = []; nstat_ = nget_('nstat', {});
+  nlog_ = []; nstat_ = nget_('nstat', {}); delete nstat_.probedThisTick;
   var err = '';
   try {
     if (P.getProperty('nver') !== NVER) { rebuildNotifyState_(); var st = nget_('nsent', {}); Object.keys(st).forEach(function (k) { if (k.charAt(0) === 'e') delete st[k]; }); nput_('nsent', st); P.setProperty('nver', NVER); } else catchUp_();
     tick_();
+    if (set0.topic) acct_(false);
   } catch (e) { err = String(e && e.stack || e).slice(0, 300); nstat_.tickErr = err.slice(0, 120); nstat_.tickErrAt = Date.now(); }
   if (!err) { nstat_.tickErr = ''; }
   nput_('nstat', nstat_);
@@ -286,7 +305,7 @@ function diag_(err, run) {
   var log = (nget_('nlog', []) || []).concat(nlog_.map(function (l) { return Utilities.formatDate(now, tz, 'dd.MM HH:mm') + '  ' + l; })).slice(-15);
   nput_('nlog', log);
   var st = nstat_ || {};
-  var rows = [['גרסת קוד', NVER], ['ערוץ מוגדר', set.topic ? 'כן' : 'לא'], ['טוקן ntfy', token_() ? 'מוגדר (' + token_().slice(0, 5) + '…)' : 'חסר'],
+  var rows = [['גרסת קוד', NVER], ['ערוץ מוגדר', set.topic ? 'כן' : 'לא'], ['טוקן ntfy', token_() ? 'מוגדר (' + token_().slice(0, 5) + '…)' : 'חסר'], ['חשבון ntfy כפי ש-ntfy רואה אותו', acctText_(st.acct)],
     ['הנקה אחרונה הסתיימה', f ? t(f.e) : '—'], ['צד אחרון', f && f.s ? f.s : '—'], ['הנקה הבאה', f && set.every ? t(f.e + set.every * 36e5) : '—'],
     ['טיימר הנקה פעיל', tim.feed ? 'כן' : 'לא'], ['שולח מיד מעל (דק׳ נטו)', set.imm == null ? '30' : String(set.imm)], ['המתנה אחרי הנקה קצרה (דק׳)', String(set.wait || 10)], ['התראה לפני (דק׳)', (set.leads || []).join(', ') || '—'],
     ['שורות שנקראו', P.getProperty('nrow') || '0'], ['התראות שהתקבלו / נדחו (מצטבר)', (st.ok || 0) + ' / ' + (st.fail || 0)],

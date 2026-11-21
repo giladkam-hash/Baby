@@ -8,7 +8,7 @@ let passed = 0; const test = async (name, fn) => { try { await fn(); passed++; c
   const browser = await chromium.launch(); const newPage = async (setup, nstatus) => {
     const ctx = await browser.newContext({ ...devices['iPhone 13'], locale: 'he-IL' }), p = await ctx.newPage(); p.errs = [];
     p.on('pageerror', e => p.errs.push(e.message));
-    await p.route('https://script.google.com/**', route => { const u = new URL(route.request().url()), a = u.searchParams.get('action'); const body = a === 'nstatus' ? (nstatus || { ok: true, ver: '9', last: Date.now(), trigger: true, token: true, topic: true, sendOk: 3, sendFail: 0, lastOk: Date.now(), lastFail: 0, runSec: 120 }) : { ok: true, total: 0, rows: [] }; route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) }); });
+    await p.route('https://script.google.com/**', route => { const u = new URL(route.request().url()), a = u.searchParams.get('action'); const body = a === 'nstatus' ? (nstatus || { ok: true, ver: '10', last: Date.now(), trigger: true, token: true, topic: true, sendOk: 3, sendFail: 0, lastOk: Date.now(), lastFail: 0, runSec: 120 }) : { ok: true, total: 0, rows: [] }; route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) }); });
     await p.goto(base); if (setup) { await p.evaluate(setup); await p.reload(); } await p.waitForTimeout(600); return p;
   };
   const withCfg = extra => `(()=>{localStorage.setItem('babylog.v1.cfg',JSON.stringify({url:'https://script.google.com/macros/s/x/exec'}));localStorage.setItem('babylog.v1',JSON.stringify({days:{},questions:{},settings:${JSON.stringify(extra)},timers:{}}))})()`;
@@ -37,7 +37,7 @@ let passed = 0; const test = async (name, fn) => { try { await fn(); passed++; c
     const p = await newPage(withCfg({ ntfy: 'chan' })); await p.evaluate(() => checkHealth()); await p.evaluate(() => checkHealth()); await p.waitForTimeout(300); assert.strictEqual(await p.locator('.banner:has-text("לא תקינות")').count(), 0);
   });
   await test('health: banner appears (after two failed checks) when the server stopped', async () => {
-    const p = await newPage(withCfg({ ntfy: 'chan' }), { ok: true, ver: '9', last: Date.now() - 40 * 6e4, trigger: true, token: true, topic: true });
+    const p = await newPage(withCfg({ ntfy: 'chan' }), { ok: true, ver: '10', last: Date.now() - 40 * 6e4, trigger: true, token: true, topic: true });
     await p.evaluate(() => checkHealth()); await p.evaluate(() => checkHealth()); await p.waitForTimeout(300); const t = await p.locator('.banner:has-text("לא תקינות")').first().textContent(); assert.ok(t.includes('לא בודק'), t);
   });
   await test('health: old server code and missing token are reported', async () => {
