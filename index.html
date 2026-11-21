@@ -884,7 +884,8 @@ function renderPrefs(){
     <p class="note">מי שיודע את שם הערוץ יכול לקרוא את ההתראות, לכן הוא אקראי וארוך ואין בהתראות שמות.</p></details>
    <button class="btn small" type="button" id="ntfyOff" style="margin-top:8px">כיבוי</button>`
    :`<p class="note" style="margin-top:0">היומן לבד יכול להתריע רק כשהוא פתוח או ממש לפני רגע. כדי לקבל התראות גם כשהוא סגור והטלפון נעול, מחברים את האפליקציה החינמית ntfy דרך הגיליון שכבר מחובר.</p>
-   ${cfg.url?`<button class="btn pri" type="button" id="ntfyOn">הפעלה</button>`:`<p class="note">צריך קודם לחבר גיבוי לגוגל שיטס (לשונית גיבוי וחיבור).</p>`}
+   ${cfg.url?`<label class="f" for="ntfyIn">שם ערוץ (אם קיבלתם שם מוכן מדביקים אותו כאן, אחרת משאירים ריק)</label>
+   <div class="row" style="flex-wrap:nowrap"><input class="in" id="ntfyIn" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="babylog-..."><button class="btn pri" type="button" id="ntfyOn">הפעלה</button></div>`:`<p class="note">צריך קודם לחבר גיבוי לגוגל שיטס (לשונית גיבוי וחיבור).</p>`}
    <div style="margin-top:12px"><button class="btn small" type="button" id="pNotif">התראות כשהיומן פתוח ברקע</button></div>`}</div>`;
   h+=`<div class="card" data-cat="general"><h2>ספים לסימונים</h2><p class="note" style="margin-top:0">היומן רק מסמן כשמה שנרשם חוצה ספים שאתם קובעים. כדאי להתאים אותם לפי הנחיית הצוות הרפואי. 0 מכבה.</p>
    <label class="f" for="pGap">פער בין ${feat('bottle')?'האכלות':'הנקות'} (שעות)</label><input class="in" type="number" inputmode="decimal" step="0.5" min="0" id="pGap" value="${s.gapH}">
@@ -1290,7 +1291,7 @@ document.addEventListener('click',ev=>{
   if(d.lead!==undefined){const v=+d.lead,cur=leads();const next=!v?[]:cur.includes(v)?cur.filter(x=>x!==v):[...cur,v];
     S.settings={...S.settings,notifyLeads:next.sort((x,y)=>y-x),notifyLead:next.length?Math.min(...next):0};saveSettings();renderPrefs();return}
   if(d.ntog){S.settings={...S.settings,[d.ntog]:d.v==='1'};saveSettings();renderPrefs();return}
-  if(el.id==='ntfyOn'){const r=Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>b.toString(36).padStart(2,'0')).join('').slice(0,20);S.settings={...S.settings,ntfy:'babylog-'+r,tz:Intl.DateTimeFormat().resolvedOptions().timeZone,appUrl:location.origin+location.pathname};saveSettings();renderPrefs();return}
+  if(el.id==='ntfyOn'){const typed=(($('#ntfyIn')||{}).value||'').trim();if(typed&&!/^[A-Za-z0-9_-]{8,64}$/.test(typed)){toast('שם הערוץ יכול להכיל רק אותיות באנגלית, ספרות ומקף');return}const r=Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>b.toString(36).padStart(2,'0')).join('').slice(0,20);S.settings={...S.settings,ntfy:typed||'babylog-'+r,tz:Intl.DateTimeFormat().resolvedOptions().timeZone,appUrl:location.origin+location.pathname};saveSettings();renderPrefs();return}
   if(el.id==='ntfyOff'){S.settings={...S.settings,ntfy:''};saveSettings();renderPrefs();return}
   if(el.id==='ntfyCopy'){copyText(S.settings.ntfy);return}
   if(el.id==='ntfyTest'){const m=$('#ntfyMsg');m.textContent='שולח…';fetch('https://ntfy.sh/',{method:'POST',body:JSON.stringify({topic:S.settings.ntfy,title:'בדיקה מיומן התינוקת',message:'אם רואים את זה, ההתראות מגיעות לטלפון 👍',tags:['baby_bottle'],priority:4})}).then(r=>{m.textContent=r.ok?'נשלחה. אם לא הגיעה תוך דקה, בדקו שנרשמתם לערוץ ב-ntfy ושההתראות שלה מאושרות.':'השליחה נכשלה ('+r.status+')'}).catch(()=>{m.textContent='השליחה נכשלה. בדקו חיבור לאינטרנט.'});return}
