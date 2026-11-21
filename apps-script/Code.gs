@@ -139,6 +139,7 @@ function rebuildClean() { rebuildClean_(sheet_()); }
  * (approve the permissions), then Deploy ← Manage deployments ← edit ← New version.
  * A trigger then runs notifyTick every minute. It reads only a small saved summary, not the sheet. */
 var NTFY = 'https://ntfy.sh/';
+var NVER = '3'; // bump when the saved summary needs new fields; the next tick rebuilds it from the sheet
 
 function setupNotifications() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'notifyTick') ScriptApp.deleteTrigger(t); });
@@ -170,7 +171,7 @@ function ingest_(jsons) {
     else if (r.k === 'ev' && /^(feed|bottle|water|med|mmed)$/.test(d.type) && d.t > now - 2 * 864e5) {
       var cur = ev[d.id];
       if (!cur || (cur.u || 0) <= u) {
-        ev[d.id] = { y: d.type, t: d.t, e: d.end || (d.dur ? d.t + d.dur * 6e4 : d.t), n: d.name || '', c: +d.n || 1, x: d.del ? 1 : 0, u: u };
+        ev[d.id] = { y: d.type, t: d.t, e: d.end || (d.dur ? d.t + d.dur * 6e4 : d.t), n: d.name || '', c: +d.n || 1, s: d.lastSide || d.side || '', x: d.del ? 1 : 0, u: u };
         changed = true;
       }
     }
@@ -226,6 +227,7 @@ function mins_(hhmm) { var a = String(hhmm || '00:00').split(':'); return (+a[0]
 function notifyTick() {
   var P = PropertiesService.getScriptProperties();
   P.setProperty('nlast', String(Date.now()));
+  if (P.getProperty('nver') !== NVER) { rebuildNotifyState_(); P.setProperty('nver', NVER); }
   var set = nget_('nset', null);
   if (!set || !set.topic) return;
   var ev = nget_('nev', {}), tim = nget_('ntim', {}), sent = nget_('nsent', {}), now = Date.now(), tz = set.tz || 'Asia/Jerusalem';
@@ -241,19 +243,21 @@ function notifyTick() {
   var feeds = list.filter(function (e) { return e.y === 'feed' || e.y === 'bottle'; }).sort(function (a, b) { return b.e - a.e; });
   if (feeds.length && !tim.feed) {
     var end = feeds[0].e, due = set.every ? end + set.every * 36e5 : 0;
-    // sent once per feed, any time before the next one is due (not only right after it ended), at normal priority so it shows on the lock screen
+    // sent once per feed, any time before the next one is due, at normal priority so it stays on the lock screen
+    var lastBreast = feeds.filter(function (e) { return e.y === 'feed' && e.s; })[0];
+    var nextSide = lastBreast ? ({ R: 'שמאל', L: 'ימין' })[lastBreast.s] || '' : '';
     if (set.end && (due ? now < due - 2 * 6e4 : now - end < 3 * 36e5)) once('e' + end, function () {
-      send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), due ? 'ההנקה הבאה ב-' + hm(due) + ' (בעוד ' + Math.max(1, Math.round((due - now) / 6e4)) + ' דק׳)' : 'נרשם ביומן', 3, ['baby_bottle'], null, app); });
+      send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), [due ? 'הבאה ב-' + hm(due) : '', nextSide ? 'צד הבא: ' + nextSide : ''].filter(String).join(' · ') || 'נרשם ביומן', 3, ['baby_bottle'], null, app); });
     // several "minutes before" alerts; if more than one is already due (e.g. phone was offline), send only the closest one
     var hitL = (set.leads || []).filter(function (l) { return now >= due - l * 6e4; }).sort(function (a, b) { return a - b; });
     if (due && hitL.length && now < due) {
       var fresh = hitL.filter(function (l) { return !sent['p' + l + ':' + end]; });
       if (fresh.length) { hitL.forEach(function (l) { if (l !== fresh[0]) sent['p' + l + ':' + end] = now; });
         once('p' + fresh[0] + ':' + end, function () {
-          send_(set.topic, 'הנקה בעוד ' + Math.max(1, Math.round((due - now) / 6e4)) + ' דק׳', 'הבאה ב-' + hm(due) + ' · האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle', 'alarm_clock'], null, app); }); }
+          send_(set.topic, 'הנקה בעוד ' + Math.max(1, Math.round((due - now) / 6e4)) + ' דק׳', 'הבאה ב-' + hm(due) + (nextSide ? ' · צד הבא: ' + nextSide : '') + ' · האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle', 'alarm_clock'], null, app); }); }
     }
     if (due && set.due && now >= due && now < due + 3 * 36e5) once('d' + end, function () {
-      send_(set.topic, 'הגיע הזמן להנקה', 'האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle'], [['עוד 15 דק׳', { action: 'snooze', key: 'd' + end, min: 15 }]], app); });
+      send_(set.topic, 'הגיע הזמן להנקה', (nextSide ? 'צד הבא: ' + nextSide + ' · ' : '') + 'האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle'], [['עוד 15 דק׳', { action: 'snooze', key: 'd' + end, min: 15 }]], app); });
   }
   // daily vitamins / medicine, once a day each, until 3 hours after the set time
   if (set.meds) (set.daily || []).forEach(function (r) {
