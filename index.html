@@ -241,6 +241,12 @@ nav.tabs button.on{color:var(--accent)}
 .wbtns{display:flex;gap:6px;flex:none}
 .wbtns .btn{min-height:44px;min-width:44px}
 .wbtns .btn[disabled]{opacity:.4}
+.pcats{display:flex;gap:6px;flex-wrap:wrap;margin:0 -2px 12px;padding:2px}
+.pcats button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:8px 14px;font-size:14px}
+.pcats button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.nrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.nrow:last-child{border-bottom:0}
+.nrow .seg{flex:none}
 .fban{display:flex;align-items:center;gap:10px;background:var(--c-feed);color:var(--ink);border-radius:14px;padding:10px 12px;margin-bottom:10px;font-size:15px}
 .fban .grow{flex:1;min-width:0}
 .fban .note{color:var(--ink);opacity:.75;font-size:13px}
@@ -352,7 +358,7 @@ const round1=n=>Math.round(n*10)/10;
 
 /* ---------- state & storage ---------- */
 const MOM=()=>(S.settings.momName||'').trim()||'אמא';
-const DEF={notifyLead:10,notifyEnd:true,notifyWater:true,notifyMeds:true,ntfy:'',tz:'',mergeMin:40,momName:'',momExtra:[],name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{},water:{goal:0,ml:0,start:'07:00',end:'22:00'}};
+const DEF={notifyDue:true,notifyPain:false,appUrl:'',notifyLead:10,notifyEnd:true,notifyWater:true,notifyMeds:true,ntfy:'',tz:'',mergeMin:40,momName:'',momExtra:[],name:'',birth:'',gapH:4,minWet:6,feedEvery:3,daily:[{id:'vitd',label:'ויטמין D',time:'09:00'}],meds:['ויטמין D'],lastVisit:'',features:{bottle:false,pump:false},momGap:{},water:{goal:0,ml:0,start:'07:00',end:'22:00'}};
 const S={days:{},questions:{},settings:{...DEF},timers:{feed:null,sleep:null},mode:'local'};
 const LS='babylog.v1';
 try{const raw=localStorage.getItem(LS);if(raw){const x=JSON.parse(raw);Object.assign(S,{days:x.days||{},questions:x.questions||{},settings:{...DEF,...(x.settings||{})},timers:x.timers||{feed:null,sleep:null}})}}catch(e){}
@@ -633,7 +639,7 @@ function waterAlert(){
   const ws=waterState();if(ws.behind<1||ws.now<=(localOnly.wSnooze||0))return;
   const key=dayKey(ws.now)+':'+ws.expected;if(waterSeen===key)return;waterSeen=key;
   if(!document.hidden)toast('💧 הגיע הזמן לבקבוק מים ('+ws.cnt+'/'+ws.goal+')');
-  try{if('Notification' in window&&Notification.permission==='granted')new Notification('יומן התינוקת',{body:'💧 שתית '+ws.cnt+' מתוך '+ws.goal+' בקבוקים. כדאי להיות כבר ב-'+ws.expected+'.'})}catch(e){}
+  sysNotify('💧 שתית '+ws.cnt+' מתוך '+ws.goal+' בקבוקים. כדאי להיות כבר ב-'+ws.expected+'.','notifyWater');
 }
 setInterval(waterAlert,60000);setTimeout(waterAlert,4000);
 /* constant banner: countdown from the end of the last feed to the next one (interval from settings) */
@@ -668,7 +674,7 @@ function dueReminders(){
   (set.daily||[]).forEach(r=>{
     const [H,M]=(r.time||'09:00').split(':').map(Number);const due=new Date();due.setHours(H,M,0,0);
     const mom=r.who==='mom',given=eventsOn(k).some(e=>e.type===(mom?'mmed':'med')&&e.name===r.label);
-    if(now>=due.getTime()&&!given&&localOnly.dismiss[r.id]!==k)out.push({id:r.id,txt:(mom?'💊 '+MOM()+': ':'')+r.label+' · '+r.time,med:r.label,mom,actL:mom?'נלקח עכשיו':'ניתן עכשיו'});
+    if(now>=due.getTime()&&!given&&localOnly.dismiss[r.id]!==k&&!((localOnly.rsn||{})[r.id]>now))out.push({rem:r,id:r.id,txt:(mom?'💊 '+MOM()+': ':'')+r.label+' · '+r.time,med:r.label,mom,actL:mom?'נלקח עכשיו':'ניתן עכשיו'});
   });
   return out;
 }
@@ -676,7 +682,13 @@ function remindersHTML(){
   let b='';const k=dayKey(Date.now());
   if(cfg.url&&sync.status==='err'&&navigator.onLine!==false)b+=`<div class="banner"><span class="grow">הסנכרון לגוגל שיטס לא הושלם</span><button type="button" data-goto="prefs">לפרטים</button></div>`;
   else if(!cfg.url&&recent(30).length>=5&&localOnly.dismiss.backup!==k)b+=`<div class="banner"><span class="grow">כדאי לחבר גיבוי לגוגל שיטס כדי שהמידע לא יאבד</span><button type="button" data-goto="prefs">חיבור</button><button type="button" id="bkLater">לא היום</button></div>`;
-  return b+dueReminders().filter(r=>r.id!=='feed').map(r=>`<div class="banner"><span class="grow">${esc(r.txt)}</span>${r.act?`<button type="button" data-open="${r.act}">${r.actL}</button>`:`<button type="button" ${r.mom?'data-momtake':'data-givemed'}="${esc(r.med)}">${r.actL}</button>`}${r.snooze?`<button type="button" data-snooze="1">עוד 15 דק׳</button>`:`<button type="button" data-dismiss="${r.id}">לא היום</button>`}</div>`).join('')}
+  return b+dueReminders().filter(r=>r.id!=='feed').map(r=>`<div class="banner"><span class="grow">${esc(r.txt)}</span>${r.act?`<button type="button" data-open="${r.act}">${r.actL}</button>`:`<button type="button" ${r.mom?'data-momtake':'data-givemed'}="${esc(r.med)}">${r.actL}</button>`}${r.snooze?`<button type="button" data-snooze="1">עוד 15 דק׳</button>`:`<button type="button" data-rsnooze="${r.id}">עוד 30 דק׳</button><button type="button" data-dismiss="${r.id}">לא היום</button>`}</div>`).join('')}
+/* system notifications from the page itself: only when the lock-screen channel (ntfy) is off, and only for chosen items */
+function sysNotify(body,kind){
+  if(S.settings.ntfy)return;
+  if(kind&&S.settings[kind]===false)return;
+  try{if('Notification' in window&&Notification.permission==='granted')new Notification('יומן התינוקת',{body})}catch(e){}
+}
 let preSeen='';
 function feedPreAlert(){
   const lead=+S.settings.notifyLead||0,every=+S.settings.feedEvery||0;if(!lead||!every||S.timers.feed)return;
@@ -684,14 +696,15 @@ function feedPreAlert(){
   if(now<due-lead*6e4||now>=due||preSeen===String(due))return;preSeen=String(due);
   const txt=feedWord()+' בעוד '+Math.max(1,Math.round((due-now)/6e4))+' דק׳ (ב-'+hm(due)+')';
   if(!document.hidden)toast('🍼 '+txt);
-  try{if('Notification' in window&&Notification.permission==='granted')new Notification('יומן התינוקת',{body:txt})}catch(e){}
+  sysNotify(txt);
 }
 setInterval(feedPreAlert,30000);
 setTimeout(()=>{try{const z=Intl.DateTimeFormat().resolvedOptions().timeZone;if(S.settings.ntfy&&z&&S.settings.tz!==z){S.settings={...S.settings,tz:z};saveSettings()}}catch(e){}},3000);setTimeout(feedPreAlert,5000);
 let notified={};
 function notifyCheck(){
   try{if(!('Notification' in window)||Notification.permission!=='granted')return;
-    dueReminders().forEach(r=>{const key=r.id+dayKey(Date.now())+(r.id==='feed'?Math.floor(Date.now()/36e5):'');if(!notified[key]){notified[key]=1;new Notification('יומן התינוקת',{body:r.txt})}})}catch(e){}
+    if(S.settings.ntfy)return;
+    dueReminders().forEach(r=>{if(r.id==='feed'&&S.settings.notifyDue===false)return;if(r.rem&&r.rem.notify===false)return;const key=r.id+dayKey(Date.now())+(r.id==='feed'?Math.floor(Date.now()/36e5):'');if(!notified[key]){notified[key]=1;new Notification('יומן התינוקת',{body:r.txt})}})}catch(e){}
 }
 
 /* ---------- log ---------- */
@@ -824,30 +837,37 @@ const qItem=q=>`<div class="qitem${q.done?' done':''}"><input type="checkbox" id
 const waLink=t=>'https://wa.me/?text='+encodeURIComponent(t);
 
 /* ---------- prefs ---------- */
+const nrow=(l,k,def=true)=>`<div class="nrow"><span>${esc(l)}</span><div class="seg"><button type="button" data-ntog="${k}" data-v="1" class="${(S.settings[k]??def)!==false&&(S.settings[k]??def)?'on':''}">פעיל</button><button type="button" data-ntog="${k}" data-v="0" class="${(S.settings[k]??def)?'':'on'}">כבוי</button></div></div>`;
 const onOff=k=>`<div class="seg"><button type="button" data-ntog="${k}" data-v="1" class="${S.settings[k]!==false?'on':''}">פעיל</button><button type="button" data-ntog="${k}" data-v="0" class="${S.settings[k]===false?'on':''}">כבוי</button></div>`;
+const PCATS=[['general','כללי'],['remind','תזכורות'],['mom',null],['notif','התראות'],['backup','גיבוי וחיבור']];
 function renderPrefs(){
-  const s=S.settings;
-  let h=`<div class="card"><h2>התינוקת</h2>
+  const s=S.settings,cat=localOnly.pcat||'general';
+  let h=`<div class="pcats" role="tablist">${PCATS.map(([k,l])=>`<button type="button" role="tab" aria-selected="${cat===k}" data-pcat="${k}" class="${cat===k?'on':''}">${esc(l||MOM())}</button>`).join('')}</div>`;
+  h+=`<div class="card" data-cat="general"><h2>התינוקת</h2>
    <label class="f" for="pName">שם</label><input class="in" id="pName" value="${esc(s.name)}" placeholder="שם התינוקת">
    <label class="f" for="pBirth">תאריך לידה</label><input class="in" type="date" id="pBirth" value="${esc(s.birth)}">
    <label class="f" for="pMom">איך לקרוא לאמא באפליקציה</label><input class="in" id="pMom" value="${esc(s.momName||'')}" placeholder="אמא"></div>`;
-  h+=`<div class="card"><h2>סוגי דיווח</h2><p class="note" style="margin-top:0">מה שכבוי לא מופיע במסך הראשי ובדוחות. אפשר להפעיל בכל זמן.</p>
+  h+=`<div class="card" data-cat="general"><h2>סוגי דיווח</h2><p class="note" style="margin-top:0">מה שכבוי לא מופיע במסך הראשי ובדוחות. אפשר להפעיל בכל זמן.</p>
    ${[['bottle','בקבוק'],['pump','שאיבה']].map(([k,l])=>`<div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span>${l}</span><div class="seg"><button type="button" data-feat="${k}" data-on="1" class="${feat(k)?'on':''}">פעיל</button><button type="button" data-feat="${k}" data-on="0" class="${feat(k)?'':'on'}">כבוי</button></div></div>`).join('')}</div>`;
-  h+=`<div class="card"><h2>תזכורות</h2>
+  h+=`<div class="card" data-cat="remind"><h2>תזכורות</h2>
    <label class="f">תזכורת ${feedWord()} אחרי</label><div class="seg" id="pEvery">${[0,2,2.5,3,3.5,4].map(v=>`<button type="button" data-every="${v}" class="${+s.feedEvery===v?'on':''}">${v?v+' ש׳':'כבוי'}</button>`).join('')}</div>
    <label class="f">תזכורות קבועות כל יום</label>
    ${(s.daily||[]).filter(r=>r.who!=='mom').map(r=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span style="flex:1">${esc(r.label)}</span><span class="num">${esc(r.time)}</span><button class="btn small" type="button" data-rdel="${r.id}">הסרה</button></div>`).join('')||'<div class="note">אין</div>'}
    <div class="row" style="margin-top:8px;flex-wrap:nowrap"><input class="in" id="rLabel" placeholder="למשל: ויטמין D" aria-label="שם התזכורת"><input class="in" type="time" id="rTime" value="09:00" style="max-width:120px" aria-label="שעה"><button class="btn" type="button" id="rAdd">הוספה</button></div>
-   <p class="note">התזכורות מופיעות כשהיומן פתוח. התראה לטלפון כשהוא סגור לא תמיד עובדת מתוך דף כזה, לכן לתזכורות קבועות כדאי להגדיר גם תזכורת בטלפון.</p>
-   <button class="btn small" type="button" id="pNotif">לנסות לאפשר התראות</button>
+   <p class="note">התזכורות מופיעות כבאנר כשהיומן פתוח. איזה מהן יקפצו גם כהתראה בטלפון בוחרים בלשונית "התראות".</p>
    <div class="row" style="justify-content:space-between;margin-top:14px"><span>מסך דלוק בזמן טיימר הנקה</span><div class="seg"><button type="button" data-awake="1" class="${s.keepAwake!==false?'on':''}">פעיל</button><button type="button" data-awake="0" class="${s.keepAwake===false?'on':''}">כבוי</button></div></div></div>`;
-  const nl=+s.notifyLead||0;
-  h+=`<div class="card" id="ntfyCard"><h2>התראות לטלפון, גם כשהוא נעול</h2>
-   <label class="f">התראה לפני ההנקה הבאה</label><div class="seg">${[0,5,10,15,20].map(v=>`<button type="button" data-lead="${v}" class="${nl===v?'on':''}">${v?v+' דק׳':'כבוי'}</button>`).join('')}</div>
-   <p class="note">לפי "תזכורת הנקה אחרי" שלמעלה, מסיום ההנקה האחרונה.</p>
-   ${s.ntfy?`<div class="row" style="justify-content:space-between;padding:6px 0"><span>התראה כשהנקה מסתיימת (עם שעת ההנקה הבאה)</span>${onOff('notifyEnd')}</div>
-   <div class="row" style="justify-content:space-between;padding:6px 0"><span>תזכורות מים</span>${onOff('notifyWater')}</div>
-   <div class="row" style="justify-content:space-between;padding:6px 0"><span>תזכורות ויטמינים ותרופות</span>${onOff('notifyMeds')}</div>
+  const nl=+s.notifyLead||0,rems=(s.daily||[]);
+  h+=`<div class="card" data-cat="notif"><h2>על מה להתריע</h2><p class="note" style="margin-top:0">רק מה שמסומן "פעיל" יקפוץ כהתראה בטלפון. הבאנרים בתוך היומן נשארים בכל מקרה.</p>
+   <label class="f">לפני ההנקה הבאה</label><div class="seg">${[0,5,10,15,20].map(v=>`<button type="button" data-lead="${v}" class="${nl===v?'on':''}">${v?v+' דק׳':'כבוי'}</button>`).join('')}</div>
+   <p class="note" style="margin-bottom:4px">לפי "תזכורת ${feedWord()} אחרי" בלשונית תזכורות, מסיום ההנקה האחרונה.</p>
+   ${nrow('הגיע הזמן להנקה','notifyDue')}
+   ${nrow('הנקה הסתיימה (עם שעת ההנקה הבאה)','notifyEnd')}
+   ${nrow('מים ל'+MOM()+' כשהקצב מאחור','notifyWater')}
+   ${nrow('תרופה לשיכוך כאבים: אפשר לקחת שוב','notifyPain',false)}
+   ${rems.length?`<label class="f">תזכורות יומיות</label>${rems.map(r=>`<div class="nrow"><span>${esc(r.label)} ${r.who==='mom'?'('+esc(MOM())+')':'(תינוקת)'} · <span class="num">${esc(r.time)}</span></span><div class="seg"><button type="button" data-rnot="${r.id}" data-v="1" class="${r.notify!==false?'on':''}">פעיל</button><button type="button" data-rnot="${r.id}" data-v="0" class="${r.notify===false?'on':''}">כבוי</button></div></div>`).join('')}`:''}
+   </div>`;
+  h+=`<div class="card" data-cat="notif" id="ntfyCard"><h2>התראות גם כשהטלפון נעול</h2>
+   ${s.ntfy?`<p class="note" style="margin-top:0">פעיל. כל ההתראות מגיעות דרך אפליקציית ntfy, והיומן עצמו לא שולח התראות כשיוצאים ממנו.</p>
    <label class="f">שם הערוץ (מדביקים אותו באפליקציית ntfy)</label>
    <div class="row" style="flex-wrap:nowrap"><input class="in" readonly dir="ltr" value="${esc(s.ntfy)}" id="ntfyTopic"><button class="btn" type="button" id="ntfyCopy">העתקה</button></div>
    <div class="row" style="margin-top:10px"><button class="btn pri" type="button" id="ntfyTest">שליחת התראת בדיקה</button><button class="btn" type="button" id="ntfyStatus">בדיקת השרת</button></div>
@@ -856,32 +876,33 @@ function renderPrefs(){
     <li>בכל טלפון: מתקינים את האפליקציה החינמית <b>ntfy</b> (App Store / Google Play) ומאשרים לה התראות.</li>
     <li>ב-ntfy לוחצים +, מדביקים את שם הערוץ שלמעלה ולוחצים Subscribe.</li>
     <li>כאן לוחצים "שליחת התראת בדיקה". אם ההתראה הגיעה, הטלפון מחובר.</li>
-    <li>פעם אחת, מהמחשב, בגיליון: מעדכנים את הקוד (Extensions ← Apps Script, מדביקים את הקוד מ"העתקת הקוד"), בוחרים למעלה את <b>setupNotifications</b> ולוחצים Run ומאשרים, ואז Deploy ← Manage deployments ← ✏️ ← New version ← Deploy.</li>
+    <li>פעם אחת, מהמחשב, בגיליון: Extensions ← Apps Script, מוחקים את הקוד הישן ומדביקים את החדש <button class="btn small" type="button" id="syCode">העתקת הקוד</button> ושומרים. בוחרים למעלה <b>setupNotifications</b>, לוחצים Run ומאשרים. אחר כך Deploy ← Manage deployments ← ✏️ ← New version ← Deploy.</li>
     <li>לוחצים "בדיקת השרת". כשכתוב שהשרת פעיל, ההתראות יגיעו גם כשהטלפון נעול והיומן סגור.</li></ol>
     <p class="note">מי שיודע את שם הערוץ יכול לקרוא את ההתראות, לכן הוא אקראי וארוך ואין בהתראות שמות.</p></details>
-   <button class="btn small" type="button" id="ntfyOff" style="margin-top:8px">כיבוי התראות לטלפון נעול</button>`
-   :`<p class="note">כדי לקבל התראות גם כשהיומן סגור והטלפון נעול: הנקה קרובה, סיום הנקה, מים וויטמינים. עובד דרך האפליקציה החינמית ntfy והגיליון שכבר מחובר.</p>
-   ${cfg.url?`<button class="btn pri" type="button" id="ntfyOn">הפעלה</button>`:`<p class="note">צריך קודם לחבר גיבוי לגוגל שיטס (למטה).</p>`}`}</div>`;
-  h+=`<div class="card"><h2>ספים לסימונים</h2><p class="note" style="margin-top:0">היומן רק מסמן כשמה שנרשם חוצה ספים שאתם קובעים. כדאי להתאים אותם לפי הנחיית הצוות הרפואי. 0 מכבה.</p>
+   <button class="btn small" type="button" id="ntfyOff" style="margin-top:8px">כיבוי</button>`
+   :`<p class="note" style="margin-top:0">היומן לבד יכול להתריע רק כשהוא פתוח או ממש לפני רגע. כדי לקבל התראות גם כשהוא סגור והטלפון נעול, מחברים את האפליקציה החינמית ntfy דרך הגיליון שכבר מחובר.</p>
+   ${cfg.url?`<button class="btn pri" type="button" id="ntfyOn">הפעלה</button>`:`<p class="note">צריך קודם לחבר גיבוי לגוגל שיטס (לשונית גיבוי וחיבור).</p>`}
+   <div style="margin-top:12px"><button class="btn small" type="button" id="pNotif">התראות כשהיומן פתוח ברקע</button></div>`}</div>`;
+  h+=`<div class="card" data-cat="general"><h2>ספים לסימונים</h2><p class="note" style="margin-top:0">היומן רק מסמן כשמה שנרשם חוצה ספים שאתם קובעים. כדאי להתאים אותם לפי הנחיית הצוות הרפואי. 0 מכבה.</p>
    <label class="f" for="pGap">פער בין ${feat('bottle')?'האכלות':'הנקות'} (שעות)</label><input class="in" type="number" inputmode="decimal" step="0.5" min="0" id="pGap" value="${s.gapH}">
    <label class="f" for="pMerge">הנקה שמתחילה עד כמה דקות אחרי הקודמת נספרת כאותה הנקה</label><input class="in" type="number" inputmode="numeric" min="0" id="pMerge" value="${+s.mergeMin>=0?+s.mergeMin:40}">
    <label class="f" for="pWet">מינימום חיתולים רטובים ביום</label><input class="in" type="number" inputmode="numeric" min="0" id="pWet" value="${s.minWet}"></div>`;
   const w=wSet();
-  h+=`<div class="card"><h2>מעקב מים ל${esc(MOM())}</h2><p class="note" style="margin-top:0">כמה בקבוקים לסיים ביום. אם לפי השעה הקצב מאחור, יופיע תזכורת כשהיומן פתוח. 0 = כבוי.</p>
+  h+=`<div class="card" data-cat="mom"><h2>מעקב מים ל${esc(MOM())}</h2><p class="note" style="margin-top:0">כמה בקבוקים לסיים ביום. אם לפי השעה הקצב מאחור, יופיע תזכורת כשהיומן פתוח. 0 = כבוי.</p>
    <div class="row" style="flex-wrap:nowrap"><div style="flex:1"><label class="f" for="wGoal">בקבוקים ביום</label><input class="in" type="number" inputmode="numeric" min="0" max="30" id="wGoal" data-water="goal" value="${+w.goal||0}"></div>
    <div style="flex:1"><label class="f" for="wMl">גודל בקבוק (מ״ל, לא חובה)</label><input class="in" type="number" inputmode="numeric" min="0" id="wMl" data-water="ml" value="${+w.ml||''}" placeholder="למשל 750"></div></div>
    <div class="row" style="flex-wrap:nowrap"><div style="flex:1"><label class="f" for="wStart">היום מתחיל ב-</label><input class="in" type="time" id="wStart" data-water="start" value="${esc(w.start)}"></div>
    <div style="flex:1"><label class="f" for="wEnd">ומסתיים ב-</label><input class="in" type="time" id="wEnd" data-water="end" value="${esc(w.end)}"></div></div>
    <p class="note">הקצב מחולק שווה על פני השעות האלה. למשל 8 בקבוקים בין 07:00 ל-22:00: בצהריים כדאי להיות בערך ב-2–3.</p></div>`;
-  h+=`<div class="card"><h2>תרופות ותוספים ל${esc(MOM())}</h2><p class="note" style="margin-top:0">כמה שעות צריך לחכות בין מנה למנה, לפי ההנחיה שקיבלתם. אחרי שנרשמת מנה, במסך הבית יופיע שעון שסופר עד שאפשר לקחת שוב. ריק = בלי שעון.</p>
+  h+=`<div class="card" data-cat="mom"><h2>תרופות ותוספים ל${esc(MOM())}</h2><p class="note" style="margin-top:0">כמה שעות צריך לחכות בין מנה למנה, לפי ההנחיה שקיבלתם. אחרי שנרשמת מנה, במסך הבית יופיע שעון שסופר עד שאפשר לקחת שוב. ריק = בלי שעון.</p>
    ${momNames().map(n=>{const r=(s.daily||[]).find(x=>x.who==='mom'&&x.label===n);return `<div class="mrow"><b>${esc(n)}</b>
      ${PAIN.includes(n)?`<label>בין מנות <input class="in" type="number" inputmode="decimal" step="0.5" min="0" data-mgap="${esc(n)}" value="${momGap(n)||''}" placeholder="—" aria-label="שעות בין מנות של ${esc(n)}"> שעות</label>`:''}
      <label>תזכורת כל יום <input class="in" type="time" data-mrem="${esc(n)}" value="${r?esc(r.time):''}" aria-label="שעת תזכורת יומית ל${esc(n)}"></label>${r?`<button class="btn small" type="button" data-mremdel="${esc(n)}">בלי תזכורת</button>`:''}</div>`}).join('')}
    <div class="row" style="margin-top:10px;flex-wrap:nowrap"><input class="in" id="mNew" type="text" autocomplete="off" placeholder="תרופה או תוסף נוסף, למשל ברזל" aria-label="שם תרופה או תוסף"><button class="btn" type="button" id="mAdd">הוספה</button></div>
    <p class="note">תזכורת יומית מופיעה כבאנר נפרד במסך הבית מהשעה שבחרתם, עד שנרשם שזה נלקח באותו יום.</p></div>`;
-  h+=`<div class="card"><h2>ויטמינים ותרופות לבחירה מהירה</h2><input class="in" id="pMeds" value="${esc((s.meds||[]).join(', '))}" aria-label="רשימה מופרדת בפסיקים"><p class="note">מפרידים בפסיקים.</p></div>`;
+  h+=`<div class="card" data-cat="remind"><h2>ויטמינים ותרופות לתינוקת · בחירה מהירה</h2><input class="in" id="pMeds" value="${esc((s.meds||[]).join(', '))}" aria-label="רשימה מופרדת בפסיקים"><p class="note">מפרידים בפסיקים.</p></div>`;
   const pend=outbox.length+photoOut.length;
-  h+=`<div class="card" id="syncCard"><h2>גיבוי וסנכרון בגוגל שיטס</h2>
+  h+=`<div class="card" id="syncCard" data-cat="backup"><h2>גיבוי וסנכרון בגוגל שיטס</h2>
    ${cfg.url?`<div class="row" style="margin-bottom:8px"><span class="pill ${sync.status==='ok'?'cloud':''}"><span class="dot"></span>${sync.busy?'מסנכרן…':sync.status==='err'?'הסנכרון נכשל':sync.status==='ok'?'מגובה ומסונכרן':'מחובר'}</span></div>
      <div class="note">${pend?pend+' רישומים ממתינים לשליחה':'כל הרישומים מגובים בגיליון'}${sync.last?' · סנכרון אחרון: '+new Date(sync.last).toLocaleString('he-IL',{dateStyle:'short',timeStyle:'short'}):''}</div>
      ${sync.status==='err'?`<div class="flags" style="margin-top:8px">${esc(sync.msg)}</div>`:''}
@@ -903,10 +924,11 @@ function renderPrefs(){
    <p class="note">כל רישום, עריכה או מחיקה נוספים כשורה חדשה בגיליון. שום דבר לא נמחק משם, כך שתמיד אפשר לשחזר. תמונות נשמרות בתיקייה בגוגל דרייב.</p></div>`;
   const trash=[];for(const k in S.days)for(const id in S.days[k].ev){const e=S.days[k].ev[id];if(e&&e.del)trash.push(e)}
   trash.sort((a,b)=>(b.u||b.t)-(a.u||a.t));
-  h+=`<div class="card"><h2>נמחקו לאחרונה</h2>${trash.length?`<ul class="list">${trash.slice(0,20).map(e=>`<li><span class="ic" style="background:var(--c-${T[e.type].c});color:var(--i-${T[e.type].c})">${IC[e.type]}</span><span class="main"><b>${T[e.type].l}</b><div>${new Date(e.t).toLocaleDateString('he-IL')} ${hm(e.t)} · ${esc(desc(e))}</div></span><button class="btn small" type="button" data-restore="${e.id}">שחזור</button></li>`).join('')}</ul>`:'<div class="empty">אין רישומים שנמחקו</div>'}</div>`;
-  h+=`<div class="card"><h2>קבצי גיבוי</h2>
+  h+=`<div class="card" data-cat="backup"><h2>נמחקו לאחרונה</h2>${trash.length?`<ul class="list">${trash.slice(0,20).map(e=>`<li><span class="ic" style="background:var(--c-${T[e.type].c});color:var(--i-${T[e.type].c})">${IC[e.type]}</span><span class="main"><b>${T[e.type].l}</b><div>${new Date(e.t).toLocaleDateString('he-IL')} ${hm(e.t)} · ${esc(desc(e))}</div></span><button class="btn small" type="button" data-restore="${e.id}">שחזור</button></li>`).join('')}</ul>`:'<div class="empty">אין רישומים שנמחקו</div>'}</div>`;
+  h+=`<div class="card" data-cat="backup"><h2>קבצי גיבוי</h2>
    <div class="row"><button class="btn" type="button" id="exCsv">טבלה (CSV) לאקסל / שיטס</button><button class="btn" type="button" id="exDl">גיבוי מלא כולל תמונות</button><button class="btn" type="button" id="exTsv">העתקה להדבקה בגיליון</button><label class="btn" for="imFile" style="display:inline-block">ייבוא גיבוי</label><input type="file" id="imFile" accept=".json,application/json" style="display:none"></div></div>`;
   $('#v-prefs').innerHTML=h;
+  document.querySelectorAll('#v-prefs .card[data-cat]').forEach(c=>c.hidden=c.dataset.cat!==cat);
 }
 
 function renderHeader(){$('#hName').textContent=S.settings.name||'התינוקת';$('#hAge').textContent=[ageTxt(),dayLabel(dayKey(Date.now()))].filter(Boolean).join(' · ')}
@@ -1260,16 +1282,19 @@ document.addEventListener('click',ev=>{
   if(d.wadd){const w=wSet(),e={id:uid(),type:'water',n:1,t:Date.now()};if(+w.ml)e.ml=+w.ml;putEvent(e);const ws=waterState();
     toast('💧 נרשם בקבוק ('+ws.cnt+(ws.goal?'/'+ws.goal:'')+')'+(ws.goal&&ws.cnt===ws.goal?' · הגעת ליעד!':''),'ביטול',()=>removeEvent(e));return}
   if(d.wdel){const l=eventsOn(dayKey(Date.now())).filter(e=>e.type==='water').pop();if(l){removeEvent(l);toast('הוסר בקבוק אחד','ביטול',()=>putEvent({...l,del:false}))}return}
+  if(d.rsnooze){localOnly.rsn={...(localOnly.rsn||{}),[d.rsnooze]:Date.now()+30*6e4};persistUI();renderAll();toast('נזכיר שוב בעוד 30 דק׳');return}
   if(d.wsnooze){localOnly.wSnooze=Date.now()+36e5;persistUI();renderAll();return}
   if(d.lead!==undefined){S.settings={...S.settings,notifyLead:+d.lead};saveSettings();renderPrefs();return}
   if(d.ntog){S.settings={...S.settings,[d.ntog]:d.v==='1'};saveSettings();renderPrefs();return}
-  if(el.id==='ntfyOn'){const r=Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>b.toString(36).padStart(2,'0')).join('').slice(0,20);S.settings={...S.settings,ntfy:'babylog-'+r,tz:Intl.DateTimeFormat().resolvedOptions().timeZone};saveSettings();renderPrefs();return}
+  if(el.id==='ntfyOn'){const r=Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>b.toString(36).padStart(2,'0')).join('').slice(0,20);S.settings={...S.settings,ntfy:'babylog-'+r,tz:Intl.DateTimeFormat().resolvedOptions().timeZone,appUrl:location.origin+location.pathname};saveSettings();renderPrefs();return}
   if(el.id==='ntfyOff'){S.settings={...S.settings,ntfy:''};saveSettings();renderPrefs();return}
   if(el.id==='ntfyCopy'){copyText(S.settings.ntfy);return}
   if(el.id==='ntfyTest'){const m=$('#ntfyMsg');m.textContent='שולח…';fetch('https://ntfy.sh/',{method:'POST',body:JSON.stringify({topic:S.settings.ntfy,title:'בדיקה מיומן התינוקת',message:'אם רואים את זה, ההתראות מגיעות לטלפון 👍',tags:['baby_bottle'],priority:4})}).then(r=>{m.textContent=r.ok?'נשלחה. אם לא הגיעה תוך דקה, בדקו שנרשמתם לערוץ ב-ntfy ושההתראות שלה מאושרות.':'השליחה נכשלה ('+r.status+')'}).catch(()=>{m.textContent='השליחה נכשלה. בדקו חיבור לאינטרנט.'});return}
   if(el.id==='ntfyStatus'){const m=$('#ntfyMsg');m.textContent='בודק…';api('GET',{action:'nstatus'}).then(x=>{const ago=x.last?Math.round((Date.now()-x.last)/6e4):null;
     m.textContent=x.trigger!==false&&ago!=null&&ago<=3?'השרת פעיל ✓ (בדק לפני '+ago+' דק׳). ההתראות יגיעו גם כשהיומן סגור.':'הקוד בגיליון מעודכן, אבל ההתראות עוד לא הופעלו: צריך לבחור setupNotifications וללחוץ Run (שלב 4).'})
     .catch(()=>{m.textContent='הגיליון לא מכיר את הבדיקה הזו: צריך לעדכן את הקוד בגיליון ולפרסם גרסה חדשה (שלב 4).'});return}
+  if(d.pcat){localOnly.pcat=d.pcat;persistUI();renderPrefs();window.scrollTo(0,0);return}
+  if(d.rnot){S.settings={...S.settings,daily:(S.settings.daily||[]).map(r=>r.id===d.rnot?{...r,notify:d.v==='1'}:r)};saveSettings();renderPrefs();return}
   if(d.awake){S.settings={...S.settings,keepAwake:d.awake==='1'};saveSettings();renderPrefs();return}
   if(d.feat){S.settings={...S.settings,features:{...(S.settings.features||{}),[d.feat]:d.on==='1'}};saveSettings();renderPrefs();return}
   /* sheet-scoped */
@@ -1394,7 +1419,7 @@ setInterval(()=>{document.querySelectorAll('[data-clock]').forEach(el=>el.textCo
   if(done&&tab==='home'&&!F){renderHome();painAlert()}},1000);
 let painSeen={};
 function painAlert(){PAIN.forEach(n=>{const nx=nextDose(n);if(!nx||Date.now()<nx||Date.now()-nx>10*6e4||painSeen[nx])return;painSeen[nx]=1;toast('אפשר לקחת שוב '+n);
-  try{if('Notification' in window&&Notification.permission==='granted')new Notification('יומן התינוקת',{body:'אפשר לקחת שוב '+n})}catch(e){}})}
+  if(S.settings.notifyPain)sysNotify('אפשר לקחת שוב '+n)})}
 setInterval(painAlert,30000);
 setInterval(()=>{if(!F&&tab==='home')renderHome();renderHeader();notifyCheck()},30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!F)renderAll()});
@@ -1406,7 +1431,7 @@ setMode();
 go(TABS.some(x=>x[0]===h0)?h0:'home');
 if(cfg.url)syncNow(false);
 setInterval(()=>{if(!document.hidden)syncNow(false)},60000);
-fetch('apps-script/Code.gs').then(r=>r.ok?r.text():'').then(t=>{scriptCode=t}).catch(()=>{});
+fetch('apps-script/Code.gs',{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{scriptCode=t}).catch(()=>{});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&cfg.url)syncSoon(300)});
 if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 </script>

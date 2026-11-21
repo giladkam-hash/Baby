@@ -65,6 +65,7 @@ function doPost(e) {
   lock.waitLock(25000);
   try {
     var b = JSON.parse(e.postData.contents);
+    if (b.action === 'snooze' || b.action === 'done') { nAction_(b); return json_({ ok: true }); }
     if (b.action === 'append') {
       var sh = sheet_();
       var rows = (b.rows || []).map(function (r) {
@@ -160,8 +161,10 @@ function ingest_(jsons) {
     if (!r || !r.d) return;
     var u = r.u || 0, d = r.d;
     if (r.k === 'set' && u >= (set.u || 0)) {
-      set = { u: u, every: +d.feedEvery || 0, lead: d.notifyLead == null ? 10 : +d.notifyLead, end: d.notifyEnd !== false, water: d.notifyWater !== false, meds: d.notifyMeds !== false,
-        topic: d.ntfy || '', tz: d.tz || 'Asia/Jerusalem', w: d.water || {}, daily: (d.daily || []).map(function (x) { return { id: x.id, l: x.label, t: x.time, m: x.who === 'mom' ? 1 : 0 }; }) };
+      set = { u: u, every: +d.feedEvery || 0, lead: d.notifyLead == null ? 10 : +d.notifyLead, end: d.notifyEnd !== false, due: d.notifyDue !== false, water: d.notifyWater !== false,
+        pain: d.notifyPain === true, gap: d.momGap || {}, app: d.appUrl || '', meds: d.notifyMeds !== false,
+        topic: d.ntfy || '', tz: d.tz || 'Asia/Jerusalem', w: d.water || {},
+        daily: (d.daily || []).filter(function (x) { return x.notify !== false; }).map(function (x) { return { id: x.id, l: x.label, t: x.time, m: x.who === 'mom' ? 1 : 0 }; }) };
       changed = true;
     } else if (r.k === 'tim' && u >= (tim.u || 0)) { tim = { u: u, feed: !!d.feed }; changed = true; }
     else if (r.k === 'ev' && /^(feed|bottle|water|med|mmed)$/.test(d.type) && d.t > now - 2 * 864e5) {
@@ -184,10 +187,39 @@ function rebuildNotifyState_() {
   var vals = sh.getRange(from, HEAD.length, sh.getLastRow() - from + 1, 1).getValues();
   ingest_(vals.map(function (r) { return String(r[0] || ''); }));
 }
-function send_(topic, title, message, prio, tags) {
+/* btns: [[label, {action:'snooze'|'done', ...}], ...] become buttons on the notification that call this script */
+function send_(topic, title, message, prio, tags, btns, click) {
   if (!topic) return;
-  UrlFetchApp.fetch(NTFY, { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-    payload: JSON.stringify({ topic: topic, title: title, message: message, priority: prio || 3, tags: tags || [] }) });
+  var msg = { topic: topic, title: title, message: message, priority: prio || 3, tags: tags || [] }, url = '';
+  try { url = ScriptApp.getService().getUrl() || ''; } catch (e) {}
+  if (click) msg.click = click;
+  if (url && btns && btns.length) msg.actions = btns.map(function (b) {
+    return { action: 'http', label: b[0], url: url, method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(b[1]), clear: true }; });
+  UrlFetchApp.fetch(NTFY, { method: 'post', contentType: 'application/json', muteHttpExceptions: true, payload: JSON.stringify(msg) });
+}
+/* "snooze": forget that a reminder was sent, and stay quiet for N minutes; "done": log it in the sheet like the app does */
+function nAction_(b) {
+  var set = nget_('nset', {}), now = Date.now();
+  if (b.action === 'snooze') {
+    var sent = nget_('nsent', {}), snz = nget_('nsnz', {});
+    Object.keys(sent).forEach(function (k) { if (k.indexOf(b.key) === 0) delete sent[k]; });
+    snz[b.key] = now + (+b.min || 30) * 6e4;
+    nput_('nsent', sent); nput_('nsnz', snz);
+    return;
+  }
+  if (b.action === 'done') {
+    var tz = set.tz || 'Asia/Jerusalem', id = 'n' + now.toString(36) + Math.random().toString(36).slice(2, 6), t = new Date(now);
+    var d = b.kind === 'water' ? { id: id, type: 'water', n: 1, t: now } : { id: id, type: b.kind === 'mmed' ? 'mmed' : 'med', name: String(b.name || ''), t: now };
+    var label = d.type === 'water' ? 'מים לאמא' : d.type === 'mmed' ? 'תרופה לאמא' : 'ויטמין / תרופה';
+    var row = [id, Utilities.formatDate(t, tz, 'd.M.yyyy, HH:mm:ss'), 'פעיל', Utilities.formatDate(t, tz, 'd.M.yyyy'), Utilities.formatDate(t, tz, 'HH:mm'), label, '', '', '', '', '', '', '',
+      d.type === 'water' ? 'בקבוק' : d.name, '', 'נרשם מההתראה', '', JSON.stringify({ k: 'ev', id: id, u: now, d: d })];
+    var sh = sheet_(), start = sh.getLastRow() + 1;
+    sh.getRange(start, HEAD.length, 1, 1).setNumberFormat('@');
+    sh.getRange(start, 1, 1, HEAD.length).setValues([row]);
+    try { rebuildClean_(sh); } catch (e) {}
+    ingest_([row[HEAD.length - 1]]);
+    send_(set.topic, 'נרשם ✓', d.type === 'water' ? 'בקבוק מים' : d.name, 1, ['white_check_mark']);
+  }
 }
 function mins_(hhmm) { var a = String(hhmm || '00:00').split(':'); return (+a[0] || 0) * 60 + (+a[1] || 0); }
 
@@ -200,24 +232,35 @@ function notifyTick() {
   var day = Utilities.formatDate(new Date(now), tz, 'yyyy-MM-dd'), hm = function (t) { return Utilities.formatDate(new Date(t), tz, 'HH:mm'); };
   var nowM = mins_(hm(now)), list = Object.keys(ev).map(function (k) { return ev[k]; }).filter(function (e) { return !e.x; });
   var today = list.filter(function (e) { return Utilities.formatDate(new Date(e.t), tz, 'yyyy-MM-dd') === day; });
-  var once = function (key, fn) { if (sent[key]) return; sent[key] = now; try { fn(); } catch (e) {} };
+  var snz = nget_('nsnz', {});
+  var snoozed = function (key) { return Object.keys(snz).some(function (p) { return snz[p] > now && key.indexOf(p) === 0; }); };
+  var once = function (key, fn) { if (sent[key] || snoozed(key)) return; sent[key] = now; try { fn(); } catch (e) {} };
+  var app = set.app || '';
 
   // feeding: "ended" note, X minutes before the next feed, and when it is due
   var feeds = list.filter(function (e) { return e.y === 'feed' || e.y === 'bottle'; }).sort(function (a, b) { return b.e - a.e; });
   if (feeds.length && !tim.feed) {
     var end = feeds[0].e, due = set.every ? end + set.every * 36e5 : 0;
     if (set.end && now - end < 20 * 6e4) once('e' + end, function () {
-      send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), due ? 'ההנקה הבאה ב-' + hm(due) + ' (בעוד ' + set.every + ' ש׳)' : 'נרשם ביומן', 2, ['baby_bottle']); });
+      send_(set.topic, 'הנקה הסתיימה ב-' + hm(end), due ? 'ההנקה הבאה ב-' + hm(due) + ' (בעוד ' + set.every + ' ש׳)' : 'נרשם ביומן', 2, ['baby_bottle'], null, app); });
     if (due && set.lead > 0 && now >= due - set.lead * 6e4 && now < due) once('p' + end, function () {
-      send_(set.topic, 'הנקה בעוד ' + Math.max(1, Math.round((due - now) / 6e4)) + ' דק׳', 'הבאה ב-' + hm(due) + ' · האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle', 'alarm_clock']); });
-    if (due && now >= due && now < due + 3 * 36e5) once('d' + end, function () {
-      send_(set.topic, 'הגיע הזמן להנקה', 'האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle']); });
+      send_(set.topic, 'הנקה בעוד ' + Math.max(1, Math.round((due - now) / 6e4)) + ' דק׳', 'הבאה ב-' + hm(due) + ' · האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle', 'alarm_clock'], null, app); });
+    if (due && set.due && now >= due && now < due + 3 * 36e5) once('d' + end, function () {
+      send_(set.topic, 'הגיע הזמן להנקה', 'האחרונה הסתיימה ב-' + hm(end), 4, ['baby_bottle'], [['עוד 15 דק׳', { action: 'snooze', key: 'd' + end, min: 15 }]], app); });
   }
   // daily vitamins / medicine, once a day each, until 3 hours after the set time
   if (set.meds) (set.daily || []).forEach(function (r) {
-    var tm = mins_(r.t); if (nowM < tm || nowM > tm + 180) return;
+    var tm = mins_(r.t), key = 'r' + r.id + day; if (nowM < tm || (nowM > tm + 180 && !snz[key])) return;
     var given = today.some(function (e) { return e.y === (r.m ? 'mmed' : 'med') && e.n === r.l; });
-    if (!given) once('r' + r.id + day, function () { send_(set.topic, '💊 ' + r.l + (r.m ? ' לאמא' : ' לתינוקת'), 'תזכורת יומית · ' + r.t, 3, ['pill']); });
+    if (!given) once(key, function () { send_(set.topic, '💊 ' + r.l + (r.m ? ' לאמא' : ' לתינוקת'), 'תזכורת יומית · ' + r.t, 3, ['pill'],
+      [[r.m ? 'נלקח ✓' : 'ניתן ✓', { action: 'done', kind: r.m ? 'mmed' : 'med', name: r.l }], ['עוד 30 דק׳', { action: 'snooze', key: key, min: 30 }]], app); });
+  });
+  // mother's painkiller: when the next dose is allowed (only if chosen and an interval was set)
+  if (set.pain) Object.keys(set.gap || {}).forEach(function (n) {
+    var g = +set.gap[n] || 0; if (!g) return;
+    var last = list.filter(function (e) { return e.y === 'mmed' && e.n === n; }).sort(function (a, b) { return b.t - a.t; })[0];
+    if (!last) return; var ready = last.t + g * 36e5;
+    if (now >= ready && now < ready + 3 * 36e5) once('k' + last.t, function () { send_(set.topic, 'אפשר לקחת שוב ' + n, 'המנה הקודמת נלקחה ב-' + hm(last.t), 3, ['pill'], null, app); });
   });
   // water: behind the pace by at least one bottle (same rule as in the app)
   var w = set.w || {}, goal = +w.goal || 0;
@@ -225,9 +268,11 @@ function notifyTick() {
     var a = mins_(w.start || '07:00'), b = mins_(w.end || '22:00'); if (b <= a) b = a + 16 * 60;
     if (nowM >= a + 60 && nowM <= b) {
       var exp = Math.floor(goal * (nowM - a) / (b - a) + 1e-9), cnt = today.filter(function (e) { return e.y === 'water'; }).reduce(function (s, e) { return s + (e.c || 1); }, 0);
-      if (exp - cnt >= 1) once('w' + day + ':' + exp, function () { send_(set.topic, '💧 הגיע הזמן לבקבוק מים', 'שתית ' + cnt + ' מתוך ' + goal + '. לפי השעה כדאי להיות ב-' + exp + '.', 3, ['droplet']); });
+      if (exp - cnt >= 1) once('w' + day + ':' + exp, function () { send_(set.topic, '💧 הגיע הזמן לבקבוק מים', 'שתית ' + cnt + ' מתוך ' + goal + '. לפי השעה כדאי להיות ב-' + exp + '.', 3, ['droplet'],
+        [['+ בקבוק', { action: 'done', kind: 'water' }], ['עוד שעה', { action: 'snooze', key: 'w' + day, min: 60 }]], app); });
     }
   }
   Object.keys(sent).forEach(function (k) { if (sent[k] < now - 3 * 864e5) delete sent[k]; });
-  nput_('nsent', sent);
+  Object.keys(snz).forEach(function (k) { if (snz[k] < now) delete snz[k]; });
+  nput_('nsent', sent); nput_('nsnz', snz);
 }
