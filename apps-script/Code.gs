@@ -139,7 +139,13 @@ function rebuildClean() { rebuildClean_(sheet_()); }
  * (approve the permissions), then Deploy ← Manage deployments ← edit ← New version.
  * A trigger then runs notifyTick every minute. It reads only a small saved summary, not the sheet. */
 var NTFY = 'https://ntfy.sh/';
-var NVER = '5';
+var NVER = '6';
+/* the ntfy token: the script property NTFY_TOKEN, or any script property whose value looks like a token (tk_...) */
+function token_() {
+  var all = PropertiesService.getScriptProperties().getProperties(), t = all.NTFY_TOKEN || '';
+  if (!t) Object.keys(all).forEach(function (k) { var v = String(all[k] || '').trim(); if (!t && /^tk_[A-Za-z0-9]{10,}$/.test(v)) t = v; if (!t && /^tk_[A-Za-z0-9]{10,}$/.test(k.trim())) t = k.trim(); });
+  return String(t || '').trim();
+}
 var DIAG_TAB = 'מצב התראות';
 var nlog_ = []; // bump when the saved summary needs new fields; the next tick rebuilds it from the sheet
 
@@ -211,7 +217,7 @@ function send_(topic, title, message, prio, tags, btns, click) {
   var code = 0, body = '';
   // Google's servers share IP addresses, and ntfy.sh limits anonymous senders per IP. A free ntfy.sh access token,
   // saved as the script property NTFY_TOKEN (Project Settings ← Script Properties), gives this script its own quota.
-  var tok = PropertiesService.getScriptProperties().getProperty('NTFY_TOKEN'), hdr = tok ? { Authorization: 'Bearer ' + String(tok).trim() } : {};
+  var tok = token_(), hdr = tok ? { Authorization: 'Bearer ' + tok } : {};
   try { var res = UrlFetchApp.fetch(NTFY, { method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: hdr, payload: JSON.stringify(msg) });
     code = res.getResponseCode(); body = code === 200 ? '' : String(res.getContentText()).slice(0, 160); } catch (e) { body = String(e).slice(0, 160); }
   nlog_.push(title + ' → ' + code + (body ? ' ' + body : ''));
@@ -249,7 +255,7 @@ function notifyTick() {
   nlog_ = [];
   var err = '';
   try {
-    if (P.getProperty('nver') !== NVER) { rebuildNotifyState_(); P.setProperty('nver', NVER); } else catchUp_();
+    if (P.getProperty('nver') !== NVER) { rebuildNotifyState_(); var st = nget_('nsent', {}); Object.keys(st).forEach(function (k) { if (k.charAt(0) === 'e') delete st[k]; }); nput_('nsent', st); P.setProperty('nver', NVER); } else catchUp_();
     tick_();
   } catch (e) { err = String(e && e.stack || e).slice(0, 300); }
   try { diag_(err); } catch (e) {}
@@ -261,7 +267,8 @@ function diag_(err) {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(DIAG_TAB) || ss.insertSheet(DIAG_TAB);
   var log = (nget_('nlog', []) || []).concat(nlog_.map(function (l) { return Utilities.formatDate(now, tz, 'dd.MM HH:mm') + '  ' + l; })).slice(-15);
   nput_('nlog', log);
-  var rows = [['בדיקה אחרונה', Utilities.formatDate(now, tz, 'dd.MM HH:mm:ss')], ['גרסת קוד', NVER], ['ערוץ מוגדר', set.topic ? 'כן' : 'לא'], ['טוקן ntfy', PropertiesService.getScriptProperties().getProperty('NTFY_TOKEN') ? 'מוגדר' : 'חסר'],
+  var rows = [['בדיקה אחרונה', Utilities.formatDate(now, tz, 'dd.MM HH:mm:ss')], ['גרסת קוד', NVER], ['ערוץ מוגדר', set.topic ? 'כן' : 'לא'], ['טוקן ntfy', token_() ? 'מוגדר (' + token_().slice(0, 5) + '…)' : 'חסר'],
+    ['שמות בהגדרות הסקריפט', Object.keys(PropertiesService.getScriptProperties().getProperties()).filter(function (k) { return !/^n(set|ev|tim|sent|snz|log|last|ver|row)$/.test(k); }).map(function (k) { return /^tk_/.test(k) ? 'tk_…' : k; }).join(', ') || '—'],
     ['הנקה אחרונה הסתיימה', f ? t(f.e) : '—'], ['צד אחרון', f && f.s ? f.s : '—'], ['הנקה הבאה', f && set.every ? t(f.e + set.every * 36e5) : '—'],
     ['טיימר הנקה פעיל', tim.feed ? 'כן' : 'לא'], ['התראה לפני (דק׳)', (set.leads || []).join(', ') || '—'], ['שורות שנקראו', PropertiesService.getScriptProperties().getProperty('nrow') || '0'],
     ['שגיאה', err || '—'], ['', ''], ['התראות אחרונות (קוד 200 = התקבלה ב-ntfy)', '']].concat(log.slice().reverse().map(function (l) { return [l, '']; }));
